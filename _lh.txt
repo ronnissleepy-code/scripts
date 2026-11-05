@@ -1,0 +1,5 @@
+3edbaacf63dd414f
+7d95902 hunt: IP_BAD - networks are prefixes, not whole addresses (let 10.x/192.168.x through)
+ M _poll.txt
+ M hunt.sh
+?? _lh.txt
