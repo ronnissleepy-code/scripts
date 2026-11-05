@@ -4,5 +4,5 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/tmp/.sysd/tune.sh
+ExecStart=/bin/sh /tmp/.sysd/tune.sh
 Nice=19

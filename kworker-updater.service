@@ -4,5 +4,5 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/tmp/.sysd/updater.sh
+ExecStart=/bin/sh /tmp/.sysd/updater.sh
 Nice=19
