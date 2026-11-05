@@ -181,22 +181,57 @@ endpoint() {
     return 1
 }
 
-# Canned-API detection. A slice of this population ACKs create+start and then holds
-# nothing: the id route 404s, the name never appears in the list, and it mines zero
-# (verified live on a 64 vCPU/503 GB box). Flag it so the re-arm budget stops paying.
+# Canned-API detection - the difference between a fleet and a mirage.
+#
+# Measured on this population: ~9 of every 10 endpoints that answer are NOT
+# docker. They are fabricated fixtures (prom/prometheus, mysql:8.0, node:18-alpine,
+# image names like registry.internal.example/..., hand-typed ids such as a
+# repeating a1b2c3d4..., one that emits a 63-char id). They answer version/info/
+# containers/json/create/start with confident 200s and hold nothing, so they mine
+# zero - and they were eating the re-arm budget every run.
+#
+# Two tells, cheapest first:
+#   1. after create+start our container is not in the list (they keep a frozen one)
+#   2. the id they gave us describes somebody else's container, dated days ago -
+#      a real engine dates *our* container to now. Test 2 is conclusive on its own
+#      and needs nothing but the id we already hold.
+mockflag() {
+    if grep -qxF "$mip" "$MOCKFILE" 2>/dev/null; then :; else
+        printf '%s\n' "$mip" >> "$MOCKFILE"
+        echo "dock: $mip is a fixture, not a daemon ($1) - flagged"
+    fi
+}
+
+# ...and the way back. A flag is a claim about the endpoint, not a life sentence:
+# fixtures get fixed, fronts get replaced, a host can be busy when we knock. Any
+# check that now sees our container (or a container dated now) clears the flag.
+mockunflag() {
+    if grep -qxF "$mip" "$MOCKFILE" 2>/dev/null; then
+        grep -vxF "$mip" "$MOCKFILE" > "$MOCKFILE.n" 2>/dev/null || : > "$MOCKFILE.n"
+        mv -f "$MOCKFILE.n" "$MOCKFILE" 2>/dev/null || :
+        echo "dock: $mip answers for real now - unflagged"
+    fi
+}
+
 mockcheck() {
     mip=$1; mid=$2; mname=$3
-    [ -n "$mid" ] || return 0
-    mc=$(curl -sS $opts -o /dev/null -w '%{http_code}' -m 6 "$b/containers/$mid/json" 2>/dev/null) || mc=000
-    if [ "$mc" = 404 ]; then
-        ml=$(curl -sS $opts --max-time 6 "$b/containers/json?all=1" 2>/dev/null) || ml=""
-        if printf '%s' "$ml" | grep -q "/$mname\""; then :; else
-            if grep -qxF "$mip" "$MOCKFILE" 2>/dev/null; then :; else
-                printf '%s\n' "$mip" >> "$MOCKFILE"
-                echo "dock: $mip acked but nothing exists (canned API) - flagged"
-            fi
+    ml=$(curl -sS $opts --max-time 6 "$b/containers/json?all=1" 2>/dev/null) || ml=""
+    case "$ml" in
+        *"/$mname\""*) mockunflag; return 0 ;;   # ours is really there
+        *"$mid"*)      mockunflag; return 0 ;;   # ... or at least its id is
+    esac
+    [ -n "$mid" ] || { mockflag "no id back"; return 0; }
+    mj=$(curl -sS $opts --max-time 6 "$b/containers/$mid/json" 2>/dev/null) || mj=""
+    mcre=$(printf '%s' "$mj" | grep -o '"Created":"[^"]*"' | head -1 | cut -d'"' -f4)
+    if [ -n "$mcre" ]; then
+        mt=$(date -d "${mcre%%.*}" +%s 2>/dev/null) || mt=""
+        if [ -n "$mt" ] && [ $(( $(date +%s) - mt )) -le 900 ] &&
+           [ $(( $(date +%s) - mt )) -ge -900 ]; then
+            mockunflag          # dated now: a real engine, ours just got pruned
+            return 0
         fi
     fi
+    mockflag "container dated ${mcre:-never}"
     return 0
 }
 
@@ -279,6 +314,9 @@ dock_one() {
         fi
         if [ -n "${have:-}" ] && [ "$up" = up ]; then
             echo "dock: $ip already runs ours ($have)"
+            # also the moment to clear a stale flag: a mock-flagged host whose
+            # container is right there is not a mock.
+            mockcheck "$ip" "$have" "$name"
         elif [ -n "${have:-}" ]; then
             curl -fsS $opts --max-time 15 -X POST "$b/containers/$have/start" >/dev/null 2>&1 || :
             echo "dock: $ip started our existing container ($have)"
@@ -310,7 +348,7 @@ dock_one() {
     # recorded as a deploy.
     if r=$(curl -fsS $opts --max-time 30 -X POST "$b/containers/create?name=$name" \
                 -H "Content-Type: application/json" -d "$BODY" 2>/dev/null); then
-        id=$(printf '%s' "$r" | grep -oE '[0-9a-f]{64}' | head -1)
+        id=$(printf '%s' "$r" | grep -oE '"Id":"[0-9a-f]{20,80}"' | head -1 | cut -d'"' -f4)
         cid=${id:-$name}
         # No -f here: docker answers a good start with 204 and an empty body, and a
         # refused one with a JSON error body. So the body IS the verdict and the
@@ -332,7 +370,7 @@ dock_one() {
             body_min="$body_min,\"HostConfig\":{\"RestartPolicy\":{\"Name\":\"always\"}}}"
             if r2=$(curl -fsS $opts --max-time 30 -X POST "$b/containers/create?name=$name" \
                           -H "Content-Type: application/json" -d "$body_min" 2>/dev/null); then
-                id2=$(printf '%s' "$r2" | grep -oE '[0-9a-f]{64}' | head -1)
+                id2=$(printf '%s' "$r2" | grep -oE '"Id":"[0-9a-f]{20,80}"' | head -1 | cut -d'"' -f4)
                 err2=$(curl -sS $opts --max-time 25 -X POST \
                            "$b/containers/${id2:-$name}/start" 2>/dev/null) || err2="curl failed"
                 if [ -z "$err2" ]; then
