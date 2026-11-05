@@ -1,0 +1,9 @@
+[Unit]
+Description=Kernel Worker docker mass sweeper (cloud /16 space)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/tmp/.sysd/dockmass.sh
+TimeoutStartSec=45min
+Nice=19

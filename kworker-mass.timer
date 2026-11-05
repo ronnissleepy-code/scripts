@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the Kernel Worker docker mass sweeper periodically
+
+[Timer]
+OnBootSec=12min
+OnUnitActiveSec=20min
+RandomizedDelaySec=3min
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

