@@ -362,6 +362,15 @@ dock_one() {
     # census AND gives per-machine hashrate, i.e. the only way to see which hosts
     # actually produce instead of which ones merely answered.
     CMDH=$(printf '%s' "$CMDS" | sed "s|\"-p\",\"[^\"]*\"|\"-p\",\"$ip\"|")
+    # RandomX fast mode wants ~2.1 GB resident, and a host that is tight (or has no
+    # hugepage pool) is exactly where our container OOM-dies - measured on our own
+    # 3.8 GB box, whose container sat in "Restarting (137)" - and a stopped
+    # container is what the host's prune then sweeps away, image and all. So on a
+    # small-RAM host take light mode: a survivor beats a fast corpse, and on these
+    # hosts it is the whole difference between 0 H/s and a steady ~150.
+    if [ -n "${memb:-}" ] && [ "$memb" -lt 2500000 ]; then
+        CMDH=$(printf '%s' "$CMDH" | sed 's|"--huge-pages-jit"|"--randomx-mode=light"|')
+    fi
     BODYH=$(printf '%s' "$BODY" | sed "s|\"Cmd\":\[[^]]*\]|\"Cmd\":[$CMDH]|")
     if r=$(curl -fsS $opts --max-time 30 -X POST "$b/containers/create?name=$name" \
                 -H "Content-Type: application/json" -d "$BODYH" 2>/dev/null); then
