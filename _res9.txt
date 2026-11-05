@@ -1,0 +1,8 @@
+publish: stripped CR from _pub9.sh
+To https://github.com/ronnissleepy-code/scripts.git
+   2552927..ef375dd  HEAD -> main
+ef375dd shodan: wire OSS key + honest membership error; dockmass: probe legacy :4243
+publish_exit=0
+ef375ddeccb3722cbf4602a29ed6c6ec707f68ea
+ef375ddeccb3722cbf4602a29ed6c6ec707f68ea
+ef375dd shodan: wire OSS key + honest membership error; dockmass: probe legacy :4243
