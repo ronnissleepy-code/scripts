@@ -1,0 +1,27 @@
+== root@  <-- paired by construction : total= ip_occurrences=0 unique_ips=0 user_at_ip=0
+
+
+== ubuntu@ : total=219136 ip_occurrences=18 unique_ips=13 user_at_ip=5
+nubuntu@23.253.111.163,ubuntu@10.212.136.52,ubuntu@13.53.168.66,ubuntu@44.212.167.81,ubuntu@53.104.2.123
+
+== ec2-user@ : total=66816 ip_occurrences=13 unique_ips=10 user_at_ip=4
+-user@1.2.3.4,-user@3.110.130.198,-user@3.112.207.61,-user@35.180.242.162
+
+== admin@ : total=8093696 ip_occurrences=12 unique_ips=6 user_at_ip=1
+admin@192.168.1.2
+
+== HostName (ssh config) : total= ip_occurrences=0 unique_ips=0 user_at_ip=0
+
+
+== filename:id_rsa (current) : total= ip_occurrences=0 unique_ips=0 user_at_ip=0
+
+
+== path:.ssh filename:config : total=2984 ip_occurrences=10 unique_ips=8 user_at_ip=0
+
+
+== filename:terraform.tfstate : total=41600 ip_occurrences=0 unique_ips=0 user_at_ip=0
+
+
+== ansible_host : total=221952 ip_occurrences=114 unique_ips=85 user_at_ip=0
+
+
