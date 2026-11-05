@@ -30,10 +30,21 @@ CR=$(printf '\r')
 # the line, so a script delivered by scp (rather than fetched via git/raw, which
 # normalises) fails with "Syntax error: 'done' unexpected". Normalise first: the
 # working tree, the commit and anything scp'd from here are then LF.
+rm -f ./*.n 2>/dev/null || :            # leftovers from a previous busy-file run
 for f in *.sh *.service *.timer *.env *.txt; do
     [ -f "$f" ] || continue
-    if [ "$(tr -cd "$CR" < "$f" | wc -c)" -gt 0 ]; then
-        tr -d "$CR" < "$f" > "$f.n" && mv -f "$f.n" "$f" && echo "publish: stripped CR from $f"
+    [ "$(tr -cd "$CR" < "$f" | wc -c)" -gt 0 ] || continue
+    tr -d "$CR" < "$f" > "$f.n" || continue
+    # A scratch file can still be held open by a parallel `ssh ... > _boxN.txt`
+    # whose redirect is mid-write. On Windows mv then fails with "Device or
+    # resource busy" - and under `set -e` that aborted the whole publish BEFORE
+    # the commit, so the change silently never reached the fleet (the updater on
+    # every host then reverts it). Never fatal: retry, else leave the file alone.
+    if mv -f "$f.n" "$f" 2>/dev/null; then
+        echo "publish: stripped CR from $f"
+    else
+        sleep 1
+        mv -f "$f.n" "$f" 2>/dev/null || { rm -f "$f.n"; echo "publish: $f busy, left as-is"; }
     fi
 done
 

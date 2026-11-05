@@ -1,0 +1,16 @@
+07:12:16
+step: add
+warning: in the working copy of 'nets.txt', CRLF will be replaced by LF the next time Git touches it
+step: commit
+step: push
+git: 'credential-manager-core' is not a git command. See 'git --help'.
+To https://github.com/ronnissleepy-code/scripts.git
+   099f4b5..3f2c391  HEAD -> main
+step: verify
+3f2c391 readme: document the shodan DB filter + staleness caveat
+3f2c391
+step: sha
+3a9d4ca2ca287754aa865f663e25289b65dc656d17da74228d468fbe044a8db2 *shodan.sh
+369293e0c6ae573db24f33e01b4a8b618be903dd5387375e4b702f845ca670ec *hunt.sh
+178d318b40154ea5c7d77532e1d90c634fc583751fce76d76d9d6751b3b1a324 *worker.env
+07:12:19
