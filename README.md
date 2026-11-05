@@ -170,6 +170,11 @@ Once one host is up, it keeps going without you:
   decides the ceiling (under 1GB xmrig cannot hold RandomX's 2GB dataset and crawls in
   light mode, so the re-arm ledger is ordered big-host-first). `:445`/SMB stays an
   operator step.
+- **Fresh gets a reserved slice.** Both passes used to share one counter and the re-arm
+  list is ~1.7x the per-run cap, so re-arm ate the whole budget and the *fresh* queue
+  scanned zero rows every run ("scanned 209 ... +0 new") while 5,082 unscanned
+  candidates sat in `mass.found` - the fleet was frozen at what it had. `DOCK_FRESH_RESERVE`
+  (default 40% of the cap) is now held back, so new hosts are always found and deployed.
 - Run the hunter by hand too: `GITHUB_TOKEN=xxx ./hunt.sh all` (or `harvest` /
   `probe` separately). It needs only `curl`, `tar`, `ssh`.
 

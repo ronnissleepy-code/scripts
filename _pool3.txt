@@ -1,1 +1,1 @@
-{"hash":250,"identifier":"global","lastHash":1793867188,"totalHashes":11851710,"validShares":154,"invalidShares":0,"expiry":1793867318446,"amtPaid":0,"amtDue":4988804,"txnCount":0}
+{"hash":1375,"identifier":"global","lastHash":1793904581,"totalHashes":40977360,"validShares":540,"invalidShares":0,"expiry":1793904691299,"amtPaid":0,"amtDue":18310363,"txnCount":0}

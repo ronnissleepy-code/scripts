@@ -18,3 +18,25 @@ publish: stripped CR from _proofout4.txt
 publish: stripped CR from _psum.txt
 publish: stripped CR from _pub16.txt
 publish: stripped CR from _pub17.txt
+publish: stripped CR from _ro2.txt
+publish: stripped CR from _speedout.txt
+publish: stripped CR from _upgout.txt
+publish: stripped CR from _verout.txt
+warning: in the working copy of '_probewait.sh', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of '_strip.sh', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of '_upg2.sh', CRLF will be replaced by LF the next time Git touches it
+To https://github.com/ronnissleepy-code/scripts.git
+   402186e..543bca3  HEAD -> main
+543bca3 perf: probe :2375 only for unverified candidates; RAM-ordered re-arm ledger; README
+publish_exit=0
+HEAD=543bca348e5eda299e19b9dd6dcf7950362b7a71
+ORIGIN=543bca348e5eda299e19b9dd6dcf7950362b7a71
+---LOG:
+543bca3 perf: probe :2375 only for unverified candidates; RAM-ordered re-arm ledger; README
+402186e perf: probe :2375 only for unverified candidates; RAM-ordered re-arm ledger; README
+---STATUS:
+ M _pub5.txt
+?? _pwlf.sh
+blob_portmap=3
+blob_hint=1
+blob_readme=1

