@@ -1,0 +1,12 @@
+---tail---
+ssh.exe : /tmp/v2.sh: 6: Syntax error: Bad fd number
+At line:1 char:271
++ ... p/_ver2.sh; & ssh.exe -i "$d\id_key" @o root@167.233.74.146 'tr -d "\ ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (/tmp/v2.sh: 6: ...: Bad fd number:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+---date---
+tail: cannot open '/tmp/_ver2.out' for reading: No such file or directory
+Thu Nov  5 06:27:00 PM UTC 2026
+

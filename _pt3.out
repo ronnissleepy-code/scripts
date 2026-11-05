@@ -1,0 +1,9 @@
+--- portmap ---
+2.2.2.2	2376
+3.3.3.3	2375
+PASS portmap: @port kept, legacy->2375, shodan excluded
+plist 2.2.2.2 -> [2376 2375 2376 4243]
+plist 3.3.3.3 -> [2375 2375 2376 4243]
+plist 1.1.1.1 -> [2375]
+_porttest2.sh: line 37: syntax error near unexpected token `('
+rc=2

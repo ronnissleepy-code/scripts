@@ -1,0 +1,4 @@
+SYNTAX-OK
+===TEST===
+portmap rows = 0 (mass.found rows = 3940)
+--- portmap head ---

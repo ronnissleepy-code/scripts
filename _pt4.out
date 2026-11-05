@@ -1,0 +1,106 @@
++ set -eu
++ PATH='/usr/bin:/usr/bin:/c/WINDOWS/system32:/c/WINDOWS:/c/WINDOWS/System32/Wbem:/c/WINDOWS/System32/WindowsPowerShell/v1.0:/c/WINDOWS/System32/OpenSSH:/cmd:/c/Program Files/nodejs:/c/Program Files/WSL:/c/Users/Patrick/.cargo/bin:/c/Users/Patrick/AppData/Local/Programs/Python/Python312/Scripts:/c/Users/Patrick/AppData/Local/Programs/Python/Python312:/c/Users/Patrick/AppData/Local/Programs/Python/Launcher:/c/Users/Patrick/AppData/Local/Microsoft/WindowsApps:/c/Users/Patrick/AppData/Local/Programs/Microsoft VS Code/bin:/c/Users/Patrick/AppData/Local/Programs/Microsoft VS Code/bin/copilot-shim:/c/Users/Patrick/AppData/Local/Programs/Ollama:/c/Users/Patrick/AppData/Roaming/npm:/c/Users/Patrick/.lmstudio/bin:/c/Users/Patrick/AppData/Roaming/Code/User/globalStorage/github.copilot-chat/debugCommand:/c/Users/Patrick/AppData/Local/Programs/Microsoft VS Code/bin/copilot-shim'
++ export PATH
+++ dirname _porttest2.sh
+++ tr -d '\r'
++ HERE=.
++ cd .
++ WORK=.hunt
+++ mktemp -d
++ T=/tmp/tmp.7GYLI6ERhS
++ trap 'rm -rf "$T"' EXIT
++ PORTMAP=/tmp/tmp.7GYLI6ERhS/ports
++ RAMFILE=/tmp/tmp.7GYLI6ERhS/ram
++ MF=/tmp/tmp.7GYLI6ERhS/mass.found
++ printf '1.1.1.1\tshodan-search\n2.2.2.2\tdocker=24.0.7@2376\n3.3.3.3\tdocker=20.10.1\n4.4.4.4\tshodan\n'
++ awk '-F\t' $'NF > 1 && $2 !~ /shodan/ {\n        p = "2375"\n        if (match($2, /@[0-9]+$/)) p = substr($2, RSTART + 1)\n        print $1 "\\t" p\n    }' /tmp/tmp.7GYLI6ERhS/mass.found
++ tr -d '\r'
++ sort -u
++ echo '--- portmap ---'
+--- portmap ---
++ cat /tmp/tmp.7GYLI6ERhS/ports
+2.2.2.2	2376
+3.3.3.3	2375
+++ wc -l
++ '[' 2 '!=' 2 ']'
+++ grep -c $'^2\\.2\\.2\\.2\t2376$' /tmp/tmp.7GYLI6ERhS/ports
++ '[' 1 '!=' 1 ']'
+++ grep -c $'^3\\.3\\.3\\.3\t2375$' /tmp/tmp.7GYLI6ERhS/ports
++ '[' 1 '!=' 1 ']'
++ grep -q $'^1\\.1\\.1\\.1\t' /tmp/tmp.7GYLI6ERhS/ports
++ echo 'PASS portmap: @port kept, legacy->2375, shodan excluded'
+PASS portmap: @port kept, legacy->2375, shodan excluded
++ for ip in 2.2.2.2 3.3.3.3 1.1.1.1
+++ sel 2.2.2.2
+++ rp=
+++ grep -q $'^2.2.2.2\t' /tmp/tmp.7GYLI6ERhS/ports
++++ grep -m1 $'^2.2.2.2\t' /tmp/tmp.7GYLI6ERhS/ports
++++ cut -f2
+++ rp=2376
+++ '[' -n 2376 ']'
+++ printf '%s\n' '2376 2375 2376 4243'
++ echo 'plist 2.2.2.2 -> [2376 2375 2376 4243]'
+plist 2.2.2.2 -> [2376 2375 2376 4243]
++ for ip in 2.2.2.2 3.3.3.3 1.1.1.1
+++ sel 3.3.3.3
+++ rp=
+++ grep -q $'^3.3.3.3\t' /tmp/tmp.7GYLI6ERhS/ports
++++ grep -m1 $'^3.3.3.3\t' /tmp/tmp.7GYLI6ERhS/ports
++++ cut -f2
+++ rp=2375
+++ '[' -n 2375 ']'
+++ printf '%s\n' '2375 2375 2376 4243'
++ echo 'plist 3.3.3.3 -> [2375 2375 2376 4243]'
+plist 3.3.3.3 -> [2375 2375 2376 4243]
++ for ip in 2.2.2.2 3.3.3.3 1.1.1.1
+++ sel 1.1.1.1
+++ rp=
+++ grep -q $'^1.1.1.1\t' /tmp/tmp.7GYLI6ERhS/ports
+++ '[' -n '' ']'
+++ printf '2375\n'
++ echo 'plist 1.1.1.1 -> [2375]'
+plist 1.1.1.1 -> [2375]
+++ sel 1.1.1.1
+++ rp=
+++ grep -q $'^1.1.1.1\t' /tmp/tmp.7GYLI6ERhS/ports
+++ '[' -n '' ']'
+++ printf '2375\n'
++ '[' 2375 = 2375 ']'
++ case "$(sel 2.2.2.2)" in
+++ sel 2.2.2.2
+++ rp=
+++ grep -q $'^2.2.2.2\t' /tmp/tmp.7GYLI6ERhS/ports
++++ grep -m1 $'^2.2.2.2\t' /tmp/tmp.7GYLI6ERhS/ports
++++ cut -f2
+++ rp=2376
+++ '[' -n 2376 ']'
+++ printf '%s\n' '2376 2375 2376 4243'
++ :
++ echo 'PASS endpoint(): verified keeps its recorded port, unverified -> :2375 only'
+PASS endpoint(): verified keeps its recorded port, unverified -> :2375 only
++ cut -f1 .hunt/dock.owned
++ sort -u
++ grep -vxF -f /tmp/tmp.7GYLI6ERhS/own .hunt/dock.seen
++ sort -u
+++ head -1 /tmp/tmp.7GYLI6ERhS/lg
++ first=104.237.152.223
++ printf '10.0.0.7\t8000000000\n%s\t1048576\n' 104.237.152.223
++ awk '-F\t' 'NR==FNR { m[$1]=$2; next } { print (($1 in m) ? m[$1] : 0) "\t" $1 }' /tmp/tmp.7GYLI6ERhS/ram /tmp/tmp.7GYLI6ERhS/lg
++ sort -rn
++ cut -f2
+++ wc -l
+++ wc -l
+++ head -1 /tmp/tmp.7GYLI6ERhS/lg3
++ echo 'ledger rows=310 kept=310 first_after=104.237.152.223'
+ledger rows=310 kept=310 first_after=104.237.152.223
+++ head -1 /tmp/tmp.7GYLI6ERhS/lg3
++ '[' 104.237.152.223 '!=' 10.0.0.7 ']'
++ echo 'FAIL big-first order'
+FAIL big-first order
++ head -3 /tmp/tmp.7GYLI6ERhS/lg3
+104.237.152.223
+98.130.119.128
+91.99.26.176
++ exit 1
++ rm -rf /tmp/tmp.7GYLI6ERhS
+rc=1

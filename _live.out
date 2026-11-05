@@ -1,0 +1,79 @@
+---live-out---
+dock: 5582 candidates, re-arm 79, cap 30, parallel 40
+dock: pass rearm, 79 row(s)
+dock: cap 30 reached, rest stays queued
+dock: pass fresh, 5582 row(s)
+dock: daemon 178.104.213.166  http://178.104.213.166:2375  docker=? api=?
+dock: daemon 178.104.212.116  http://178.104.212.116:2375  docker=24.0.7 api=1.43
+dock: daemon 164.68.96.28  http://164.68.96.28:2375  docker=24.0.7 api=1.43
+dock: daemon 167.233.74.146  http://167.233.74.146:2375  docker=29.1.3 api=1.52
+dock: daemon 140.238.220.148  http://140.238.220.148:2375  docker=24.0.7 api=1.43
+dock: daemon 142.93.39.77  http://142.93.39.77:2375  docker=24.0.7 api=1.43
+dock: daemon 138.197.241.8  http://138.197.241.8:2375  docker=20.10.21 api=1.41
+dock: daemon 134.209.121.89  http://134.209.121.89:2375  docker=29.8.0 api=1.56
+dock: daemon 104.131.83.204  http://104.131.83.204:2375  docker=24.0.7 api=1.43
+dock: DEPLOYED kworker -> 178.104.213.166 (restart=always)
+dock: 178.104.212.116 start said: {}
+dock: daemon 159.203.50.188  http://159.203.50.188:2375  docker=20.10.21 api=1.41
+dock: 167.233.74.146 started our existing container (55950b421240b477ad8e9dfab3e457e9cd9694e4a46899c73a2ddca4af61aa1c)
+dock: 140.238.220.148 pulling xmrig/xmrig
+dock: daemon 178.128.219.150  http://178.128.219.150:2375  docker=20.10.21 api=1.41
+dock: plain start also said: {}
+dock: 142.93.39.77 pulling xmrig/xmrig
+dock: daemon 165.245.185.1  http://165.245.185.1:2375  docker=24.0.7 api=1.43
+dock: DEPLOYED kworker -> 164.68.96.28 (restart=always)
+dock: DEPLOYED kworker -> 142.93.39.77 (restart=always)
+dock: DEPLOYED kworker -> 140.238.220.148 (restart=always)
+dock: daemon 103.185.193.57  http://103.185.193.57:2375  docker=24.0.7 api=1.43
+dock: daemon 104.248.207.126  http://104.248.207.126:2375  docker=27.5.1 api=1.47
+dock: daemon 133.242.237.176  http://133.242.237.176:2375  docker=20.10.21 api=1.41
+dock: 138.197.241.8 pulling xmrig/xmrig
+dock: daemon 170.64.147.15  http://170.64.147.15:2375  docker=24.0.7 api=1.43
+dock: daemon 170.64.228.17  http://170.64.228.17:2375  docker=24.0.7 api=1.43
+dock: 104.131.83.204 pulling xmrig/xmrig
+dock: 159.203.50.188 pulling xmrig/xmrig
+dock: 134.209.121.89 already runs ours (ec551ffa3d2bb13e49ba59fcf81b1636a3a16f64879d019d7e62deff4a661a4e)
+dock: 178.128.219.150 pulling xmrig/xmrig
+dock: DEPLOYED kworker -> 138.197.241.8 (restart=always)
+dock: DEPLOYED kworker -> 104.131.83.204 (restart=always)
+dock: 165.245.185.1 pulling xmrig/xmrig
+dock: DEPLOYED kworker -> 159.203.50.188 (restart=always)
+dock: daemon 151.236.25.235  http://151.236.25.235:2375  docker=18.06.1-ce api=1.38
+dock: daemon 172.105.25.164  http://172.105.25.164:2375  docker=18.06.1-ce api=1.38
+dock: daemon 172.105.9.151  http://172.105.9.151:2375  docker=18.06.1-ce api=1.38
+dock: daemon 172.232.206.53  http://172.232.206.53:2375  docker=18.06.1-ce api=1.38
+dock: 104.248.207.126 pulling xmrig/xmrig
+dock: DEPLOYED kworker -> 178.128.219.150 (restart=always)
+dock: 103.185.193.57 already runs ours (3cdee90ff6410d43f8d9c743b018890d33a8c2063894fbffcd2f60da9f3fdaec)
+dock: 133.242.237.176 pulling xmrig/xmrig
+dock: 170.64.228.17 pulling xmrig/xmrig
+dock: DEPLOYED kworker -> 165.245.185.1 (restart=always)
+dock: 170.64.147.15 pulling xmrig/xmrig
+dock: daemon 139.162.225.92  http://139.162.225.92:2375  docker=18.06.1-ce api=1.38
+dock: daemon 178.79.133.63  http://178.79.133.63:2375  docker=18.06.1-ce api=1.38
+dock: daemon 139.180.206.8  http://139.180.206.8:2375  docker=18.06.1-ce api=1.38
+dock: DEPLOYED kworker -> 104.248.207.126 (restart=always)
+dock: DEPLOYED kworker -> 133.242.237.176 (restart=always)
+dock: DEPLOYED kworker -> 170.64.228.17 (restart=always)
+dock: DEPLOYED kworker -> 170.64.147.15 (restart=always)
+dock: 172.232.206.53 start said: 0
+dock: 151.236.25.235 start said: 0
+dock: 178.79.133.63 start said: 0
+dock: 139.162.225.92 start said: 0
+dock: 172.105.25.164 start said: 0
+dock: 172.105.9.151 start said: 0
+dock: plain start also said: 0
+dock: plain start also said: 0
+dock: 139.180.206.8 start said: 0
+dock: plain start also said: 0
+dock: plain start also said: 0
+dock: plain start also said: 0
+dock: plain start also said: 0
+dock: plain start also said: 0
+---state---
+  1 /tmp/.sysd/.hunt/dock.ports
+  7 /tmp/.sysd/.hunt/dock.ram
+  8 total
+---date---
+Thu Nov  5 06:26:08 PM UTC 2026
+

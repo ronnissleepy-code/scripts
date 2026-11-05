@@ -1,0 +1,22 @@
+---owned---
+    59 /tmp/.sysd/.hunt/dock.owned
+  8088 /tmp/.sysd/.hunt/dock.seen
+  8147 total
+---recreate24---
+1
+---journaltail---
+Nov 05 18:17:55 ubuntu-4gb-fsn1-2 dock.sh[378141]: dock: plain start also said: {"message":"page not found"}
+Nov 05 18:17:55 ubuntu-4gb-fsn1-2 dock.sh[378139]: dock: plain start also said: {"message":"page not found"}
+Nov 05 18:17:55 ubuntu-4gb-fsn1-2 dock.sh[378138]: dock: plain start also said: {"message":"page not found"}
+Nov 05 18:17:56 ubuntu-4gb-fsn1-2 dock.sh[378152]: dock: plain start also said: {"message":"page not found"}
+Nov 05 18:18:03 ubuntu-4gb-fsn1-2 dock.sh[378156]: dock: create failed on 8.208.84.236
+Nov 05 18:19:05 ubuntu-4gb-fsn1-2 dock.sh[351134]: dock: scanned 209, daemons known 8088, placed 59 (+0 new, 209 re-verified)
+Nov 05 18:19:05 ubuntu-4gb-fsn1-2 dock.sh[351134]: dock: re-arm ledger holds 315 known-but-lost host(s)
+Nov 05 18:19:05 ubuntu-4gb-fsn1-2 systemd[1]: kworker-dock.service: Deactivated successfully.
+Nov 05 18:19:05 ubuntu-4gb-fsn1-2 systemd[1]: Finished kworker-dock.service - Kernel Worker docker spreader (exposed :2375 daemons).
+Nov 05 18:19:05 ubuntu-4gb-fsn1-2 systemd[1]: kworker-dock.service: Consumed 58.771s CPU time.
+---timer---
+NEXT                         LEFT LAST                          PASSED UNIT               ACTIVATES
+Thu 2026-11-05 18:36:52 UTC 15min Thu 2026-11-05 18:16:00 UTC 5min ago kworker-dock.timer kworker-dock.service
+
+

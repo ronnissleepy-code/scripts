@@ -1,0 +1,14 @@
+--- portmap ---
+2.2.2.2	2376
+3.3.3.3	2375
+PASS portmap: @port kept, legacy->2375, shodan excluded
+plist 2.2.2.2 -> [2376 2375 2376 4243]
+plist 3.3.3.3 -> [2375 2375 2376 4243]
+plist 1.1.1.1 -> [2375]
+PASS endpoint(): verified keeps its recorded port, unverified -> :2375 only
+ledger rows=310 kept=310 first_after=108.129.134.54
+FAIL small host did not sink
+108.136.234.225
+108.131.152.118
+108.130.7.147
+rc=1
