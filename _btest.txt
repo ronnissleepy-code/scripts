@@ -1,0 +1,8 @@
+=== A: shodan.io search page, keyless ===
+http=403 bytes=5565
+--- unique IPs in the page:
+2
+1.0.1.1
+1.2.1.1
+--- does it look like results or a login wall:
+=== B: internetdb throughput at -P 20 ===
