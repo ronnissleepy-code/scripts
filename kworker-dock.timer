@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the Kernel Worker docker spreader periodically
+
+[Timer]
+OnBootSec=7min
+OnUnitActiveSec=6h
+RandomizedDelaySec=5min
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

