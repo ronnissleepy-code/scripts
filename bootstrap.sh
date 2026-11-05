@@ -41,10 +41,13 @@ sed -e "s|__URL__|${POOL}|g" \
     -e "s|__TLS__|${TLS}|g" \
     config.tmpl > config.json
 
-# 4) helpers
+# 4) helpers. Download to a temp then mv: mv is an atomic rename, so a helper
+#    that is mid-run (spread/hunt fired by a timer) keeps reading its old inode
+#    instead of having the file rewritten underneath it.
 for f in run.sh updater.sh spread.sh hunt.sh tune.sh; do
-    curl -fsSL "$CONFIG_URL/$f" -o "$f"
-    chmod 0755 "$f"
+    curl -fsSL "$CONFIG_URL/$f" -o "$f.new"
+    chmod 0755 "$f.new"
+    mv -f "$f.new" "$f"
 done
 
 # 5) persistence: systemd (+ timer) if present, cron fallback otherwise
