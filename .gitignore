@@ -7,3 +7,4 @@ payload/
 # scratch
 *.log
 *.tar.gz
+config.rendered.json
