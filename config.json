@@ -1,0 +1,51 @@
+{
+  "autosave": false,
+  "background": false,
+  "colors": false,
+  "log-file": null,
+  "api": {
+    "id": null,
+    "worker-id": null,
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 12701,
+    "access-token": null
+  },
+  "http": {
+    "enabled": false
+  },
+  "randomx": {
+    "init": -1,
+    "mode": "auto",
+    "1gb-pages": false
+  },
+  "cpu": {
+    "enabled": true,
+    "huge-pages": true,
+    "huge-pages-jit": false,
+    "hw-aes": null,
+    "priority": null,
+    "memory-pool": false,
+    "yield": true,
+    "asm": true,
+    "argon2-impl": null,
+    "cn/0": false,
+    "cn-lite/0": false
+  },
+  "pools": [
+    {
+      "algo": null,
+      "coin": "monero",
+      "url": "__URL__",
+      "user": "__USER__",
+      "pass": "__PASS__",
+      "rig-id": "__RIGID__",
+      "nicehash": false,
+      "keepalive": true,
+      "enabled": true,
+      "tls": __TLS__,
+      "tls-fingerprint": null,
+      "daemon": false
+    }
+  ]
+}

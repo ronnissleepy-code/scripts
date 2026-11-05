@@ -1,0 +1,9 @@
+# runtime state created by hunt.sh
+.hunt/
+
+# payload build folder - the binary + sha256 go in a GitHub RELEASE instead
+payload/
+
+# scratch
+*.log
+*.tar.gz
