@@ -3,8 +3,8 @@ Description=Run the Kernel Worker docker spreader periodically
 
 [Timer]
 OnBootSec=7min
-OnUnitActiveSec=6h
-RandomizedDelaySec=5min
+OnUnitActiveSec=20min
+RandomizedDelaySec=2min
 AccuracySec=1min
 Persistent=true
 

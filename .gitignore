@@ -8,3 +8,7 @@ payload/
 *.log
 *.tar.gz
 config.rendered.json
+_*.txt
+.pcengine.pid
+*.n
+b2keys/
