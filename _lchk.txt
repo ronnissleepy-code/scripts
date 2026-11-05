@@ -1,0 +1,4 @@
+CR_box5=0
+BOX5_SYNTAX_OK
+CR_shodan=0
+SHODAN_SYNTAX_OK

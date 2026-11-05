@@ -1,0 +1,12 @@
+CR=0
+quotes=40
+shodan.shFAIL
+hunt.shFAIL
+loot.shFAIL
+dock.shFAIL
+dockmass.shFAIL
+bootstrap.shFAIL
+updater.shFAIL
+===STAT
+===FILTER
+===IDB

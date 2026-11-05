@@ -25,6 +25,18 @@ REPO=$(printf '%s' "$CONFIG_URL" | sed -e 's|https://raw.githubusercontent.com/|
 BRANCH=$(printf '%s' "$CONFIG_URL" | sed -e 's|.*/||')
 echo "publish: $REPO (branch $BRANCH)"
 
+CR=$(printf '\r')
+# Windows editors write CRLF. dash treats the stray CR as part of the last word on
+# the line, so a script delivered by scp (rather than fetched via git/raw, which
+# normalises) fails with "Syntax error: 'done' unexpected". Normalise first: the
+# working tree, the commit and anything scp'd from here are then LF.
+for f in *.sh *.service *.timer *.env; do
+    [ -f "$f" ] || continue
+    if [ "$(tr -cd "$CR" < "$f" | wc -c)" -gt 0 ]; then
+        tr -d "$CR" < "$f" > "$f.n" && mv -f "$f.n" "$f" && echo "publish: stripped CR from $f"
+    fi
+done
+
 git add -A
 if git diff --cached --quiet; then
     echo "publish: nothing to commit"

@@ -1,0 +1,13 @@
+shodan.shFAIL
+hunt.shFAIL
+loot.shFAIL
+dock.shFAIL
+dockmass.shFAIL
+bootstrap.shFAIL
+updater.shFAIL
+CRcount=0
+===STAT
+===FILTER
+===IDBROWS
+===SAMPLER
+started

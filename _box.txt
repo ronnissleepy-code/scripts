@@ -1,0 +1,18 @@
+BOX:
+ls: cannot access 'shodan.sh'$'\r': No such file or directory
+wc: 'shodan.sh'$'\r': No such file or directory
+grep: shodan.sh
+: No such file or directory
+--- l30-33:
+sed: can't read shodan.sh
+: No such file or directory
+--- syntax:
+head: invalid trailing option -- 
+Try 'head --help' for more information.
+--- rc:
+rc=2
+--- md5:
+md5sum: 'shodan.sh'$'\r': No such file or directory
+--- updater list:
+grep: updater.sh
+: No such file or directory

@@ -1,0 +1,5 @@
+LOCAL:
+5797 shodan.sh
+quotes=66
+SYNTAX_OK
+5decba0b1cd95ef4d71326b18b711fa9 *shodan.sh
