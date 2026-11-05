@@ -92,6 +92,12 @@ harvest() {
         return 0
     fi
     : > "$WORK/urls.txt"; : > "$WORK/repos.txt"; : > "$WORK/pairs.txt"
+    # prune dead keys harvested before the -SK / unparseable filters existed
+    for k in "$WORK"/keys/*; do
+        [ -f "$k" ] || continue
+        kinfo=$(ssh-keygen -l -f "$k" 2>/dev/null) || { rm -f "$k"; continue; }
+        case "$kinfo" in *-SK*) rm -f "$k" ;; esac
+    done
     # NOTE: each search result carries three html_urls - owner, repository and
     # the file itself. Only the file one contains /blob/, so keep just those,
     # otherwise an org URL can register a repo name and shadow the real key URL.
