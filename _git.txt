@@ -1,6 +1,7 @@
-6e3027d fetchers: ?v cache-buster so a fresh publish is not masked by raw CDN caching
-## main...origin/main
+HEAD:
+2e46a50 shodan:
+1cb5dec shodan:
+ORIGIN:
+2e46a50
+STATUS:
  M _git.txt
- M _poll.txt
-6e3027d
-6c652421d718e483

