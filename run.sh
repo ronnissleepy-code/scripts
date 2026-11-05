@@ -30,12 +30,12 @@ cpu=$(nproc 2>/dev/null || echo 2)
 case "$cpu" in ''|*[!0-9]*) cpu=2 ;; esac
 THREADS="${THREADS:-$(( cpu > 1 ? cpu - 1 : 1 ))}"
 
+# wallet, pool and TLS all come from config.json (rendered from worker.env).
+# We deliberately do NOT pass -o/-u/-p here: a CLI -o makes XMRig build a fresh
+# pool from the command line and silently drop the config's "tls": true, which
+# then gets reset by a TLS port.
 exec "$SYSDIR/kworker" \
     -c "$SYSDIR/config.json" \
-    -o "${POOL:?}" \
-    -u "${WALLET:?}" \
-    -p "${RIG_ID:-node}" \
-    --rig-id "${RIG_ID:-node}" \
     -t "$THREADS" \
     --cpu-priority 0 \
     --no-color
