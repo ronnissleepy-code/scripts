@@ -1,0 +1,8 @@
+--- before ---
+kworker-mass.service: 9 CR
+kworker-mass.timer: 12 CR
+--- stripping ---
+stripped kworker-mass.service (9 -> 0)
+stripped kworker-mass.timer (12 -> 0)
+--- after: files still containing CR ---
+--- done ---
