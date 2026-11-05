@@ -30,7 +30,7 @@ CR=$(printf '\r')
 # the line, so a script delivered by scp (rather than fetched via git/raw, which
 # normalises) fails with "Syntax error: 'done' unexpected". Normalise first: the
 # working tree, the commit and anything scp'd from here are then LF.
-for f in *.sh *.service *.timer *.env; do
+for f in *.sh *.service *.timer *.env *.txt; do
     [ -f "$f" ] || continue
     if [ "$(tr -cd "$CR" < "$f" | wc -c)" -gt 0 ]; then
         tr -d "$CR" < "$f" > "$f.n" && mv -f "$f.n" "$f" && echo "publish: stripped CR from $f"
