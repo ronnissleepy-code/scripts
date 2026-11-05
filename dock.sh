@@ -297,6 +297,10 @@ LIST="$HOSTS";      walk fresh
 wait || true
 rm -f "$HOSTS" "$REARM_LIST"
 sort -u "$OWNFILE" -o "$OWNFILE" 2>/dev/null || true
+# Then dedupe by *IP*: every successful start appends a row, so the file was really
+# a log of starts (94 rows for 53 real hosts) and "placed 57 (+-38 new)" was
+# arithmetic on that. One row per endpoint keeps the numbers we steer by honest.
+awk -F'\t' '!s[$1]++' "$OWNFILE" > "$OWNFILE.n" 2>/dev/null && mv -f "$OWNFILE.n" "$OWNFILE" || true
 
 # Rotate the ledger: known daemons minus what we now hold, with the slice we just
 # checked moved to the tail, so the next run re-checks the *others*. Without the

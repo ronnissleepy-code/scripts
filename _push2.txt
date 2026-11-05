@@ -1,11 +1,19 @@
-git: 'credential-manager-core' is not a git command. See 'git --help'.
-To https://github.com/ronnissleepy-code/scripts.git
-   747f663..8998b5e  main -> main
-## main...origin/main
- M _poll.txt
- M _push.txt
-?? _pub.txt
-?? _push2.txt
-?? _scopes.out
-?? _scopes.sh
-8998b5e
+﻿HEAD=963a009 origin=963a009
+local_has_owned_dedupe=1
+local_sha=302DD878DC635AA6
+box1:
+ssh.exe : Warning: Permanently added '167.233.74.146' (ED25519) to the list of known hosts.
+At line:1 char:394
++ ... 1:'; $o += (ssh.exe -i id_key -o IdentitiesOnly=yes -o StrictHostKeyC ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Warning: Perman...of known hosts.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+dock_sha=35a89bbad25a06e1
+queue=4034
+shodan_rows=4033
+seed_done=3
+SEEDLOG
+seed_procs=0
+owned_lines=57 owned_uniq=53
+seen_uniq=320
