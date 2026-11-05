@@ -59,7 +59,27 @@ EOF
 # one address -> idb.txt, plus the follow-ups it earns. echo the verdict.
 lookup() {
     ip=$1
-    r=$(curl -sS -m 8 "https://internetdb.shodan.io/$ip" 2>/dev/null) || r=""
+    tries=0
+    r=""
+    while [ "$tries" -lt 3 ]; do
+        tries=$((tries + 1))
+        r=$(curl -sS -m 8 "https://internetdb.shodan.io/$ip" 2>/dev/null) || r=""
+        # internedb is ~1 req/s and answers a burst with {"error":"Rate limit
+        # exceeded..."}. That is NOT "no information": a throttled reply used to
+        # be parsed as data, so the host was logged with empty ports and then
+        # marked unenterable - i.e. a rate limit quietly deleted real
+        # candidates. Back off and retry; on final failure leave the host out of
+        # idb.done so the next run picks it up again.
+        case "$r" in
+            *'"error"'*|*'Rate limit'*|"") sleep $((tries * 3)) ;;
+            *) break ;;
+        esac
+    done
+    case "$r" in
+        *'"error"'*|*'Rate limit'*|"")
+            echo "shodan: $ip still rate-limited, retrying next run"
+            return 0 ;;
+    esac
     printf '%s\n' "$ip" >> "$DONE"
     case "$r" in
         ""|*'"detail"'*)
