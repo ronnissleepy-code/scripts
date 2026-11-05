@@ -1,1 +1,16 @@
 publish: ronnissleepy-code/scripts (branch main)
+warning: in the working copy of '_box6.txt', CRLF will be replaced by LF the next time Git touches it
+To https://github.com/ronnissleepy-code/scripts.git
+   7c74830..1229670  HEAD -> main
+1229670 readme: document the shodan DB filter + its staleness caveat
+---HEAD:
+1229670 readme: document the shodan DB filter + its staleness caveat
+7c74830 readme: document the shodan DB filter + its staleness caveat
+---ORIGIN:
+1229670
+---STATUS:
+ M _pub5.txt
+---LOCAL_SHA:
+04b11274fd76807b08562fe7b9dfae5a314ea99f5f34ce5fe3d2e10ca64a8a0d *shodan.sh
+369293e0c6ae573db24f33e01b4a8b618be903dd5387375e4b702f845ca670ec *hunt.sh
+1f082640a6799797667ace14e6ec790374b50901d2e274b74edb4403c58c01d1 *worker.env
