@@ -5,14 +5,14 @@
   "log-file": null,
   "api": {
     "id": null,
-    "worker-id": null,
+    "worker-id": null
+  },
+  "http": {
     "enabled": true,
     "host": "127.0.0.1",
     "port": 12701,
-    "access-token": null
-  },
-  "http": {
-    "enabled": false
+    "access-token": null,
+    "restricted": true
   },
   "randomx": {
     "init": -1,
