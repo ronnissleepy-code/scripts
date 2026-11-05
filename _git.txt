@@ -1,12 +1,6 @@
-7b454b9 codify publication (hosts only see published revisions); harvest: drop impossible hosts, ssh-config pairs, paced code search
-8998b5e hunt: drop impossible hosts (CDN fronts, placeholders, version strings), derive pairs from ssh-config stanzas, pace+retry code search, 50 repos/run
+6e3027d fetchers: ?v cache-buster so a fresh publish is not masked by raw CDN caching
 ## main...origin/main
  M _git.txt
  M _poll.txt
- M bootstrap.sh
- M updater.sh
-?? _probe.sh
-?? _upddbg.lf
-?? _upddbg.sh
-7b454b9
-7b454b9
+6e3027d
+6c652421d718e483

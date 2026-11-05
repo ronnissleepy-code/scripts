@@ -85,7 +85,11 @@ USER_AT_RE='[A-Za-z_][A-Za-z0-9_-]*@([0-9]{1,3}\.){3}[0-9]{1,3}'
 # awk sees these as ERE, where the backslashes are just noise (and warn)
 IP_BAD_AWK=$(printf '%s' "$IP_BAD" | tr -d '\\')
 rank_ips() {
-    grep -vE "$IP_BAD" | sort | uniq -c | sort -rn | awk '{print $2}'
+    # awk, not grep -vE: the same filter as the prune below (the ERE has to
+    # survive being a variable, and this form is the one that demonstrably drops
+    # private/reserved/front addresses instead of letting them into the queue).
+    awk -v junk="$IP_BAD_AWK" '$0 !~ junk { c[$0]++ } END { for (i in c) printf "%d %s\n", c[i], i }' \
+      | sort -rn | awk '{print $2}'
 }
 
 # ssh-config stanzas: HostName + User in one block is the same precise pair, and

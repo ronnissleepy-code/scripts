@@ -1,8 +1,2 @@
--- suffix ''
-ok bytes=6493 MASS_PAR=1 HUNT_REPOS=HUNT_MAX_REPOS="50"
--- suffix '?v=1793858429'
-ok bytes=6493 MASS_PAR=1 HUNT_REPOS=HUNT_MAX_REPOS="50"
--- hunt.sh ?v:
-bytes=15948 lines=315
--- published HEAD:
-  "sha": "7b454b9486f1ac93adeeafe9c9ab7a3d07c43f85",
+===TAIL
+rc=0
