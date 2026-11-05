@@ -33,7 +33,7 @@ Everything else is a small runnable reference implementation of it.
 | `kworker-hunt.service` / `.timer` | Hunt schedule |
 | `kworker-loot.service` / `.timer` | Trust-graph loot schedule (every 6h) |
 | `kworker-dock.service` / `.timer` | Docker scan + re-arm schedule (every 20min) |
-| `kworker-mass.service` / `.timer` | Docker mass sweep schedule (every 20min, budgeted) |
+| `kworker-mass.service` / `.timer` | Docker mass sweep schedule (every 10min, 8min budget) |
 | `publish.sh` | Push the kit to `CONFIG_URL` - hosts only ever see published revisions |
 
 ## Spread is three rates, not one
@@ -41,7 +41,9 @@ Everything else is a small runnable reference implementation of it.
 Fleet growth = find rate x deploy rate x **retention**. Each is a separate knob,
 and each was, at some point, silently zero:
 
-- **find** - `dockmass.sh` sweeps provider /16s (budgeted) every 20 min, `seed.sh`
+- **find** - `dockmass.sh` sweeps provider /16s on a **10-min timer with an 8-min budget**
+  (it used to be hourly at 600s, a ~17% duty cycle - raised ~5x because the fixture rate
+  makes raw discovery volume, not candidate quality, the binding constraint). `seed.sh`
   buys 100 fresh daemon candidates per Shodan credit when `due`, and
   `hunt.sh`/`shodan.sh` add repo-derived addresses. Everything lands in
   `.hunt/mass.found`, which `dock.sh` reads as its queue.
@@ -175,12 +177,20 @@ Once one host is up, it keeps going without you:
   scanned zero rows every run ("scanned 209 ... +0 new") while 5,082 unscanned
   candidates sat in `mass.found` - the fleet was frozen at what it had. `DOCK_FRESH_RESERVE`
   (default 40% of the cap) is now held back, so new hosts are always found and deployed.
-- **Canned-API hosts are flagged, not trusted.** A slice of this population ACKs `create`
-  and `start` and then holds nothing: the id route 404s, the name never appears in the
-  list, and it mines zero (measured on a live 64 vCPU/503 GB box). `dock.sh` now reads the
-  container back by id after a start, writes the ones that aren't there to
-  `.hunt/dock.mock`, and sinks them to the tail of the re-arm ledger so the budget goes to
-  hosts that can produce a share. The run summary reports the flagged count.
+- **Fixtures are not daemons - and they are ~9 of every 10 endpoints.** Measured with
+  `_fake.sh` on 12 live hosts: 11 were hand-written API fixtures, not docker. They answer
+  `version`/`info`/`containers/json`/`create`/`start` with confident 200s, hold nothing, and
+  therefore mine zero - while eating the re-arm budget every run. Tells, all observed live:
+  a "list" that is one frozen object (`payments-api` from `registry.internal.example`,
+  `web-app`, `prom/prometheus`, `mysql:8.0`, `node:18-alpine`), hand-typed ids (a repeating
+  `a1b2c3d4...`, a 63-char id, a 32-char id), and a "256 vCPU / 1 TB RAM" box with invented
+  numbers. The conclusive test is also the cheapest, and needs only the id already in hand:
+  **a real engine dates the container it just created to now**. `dock.sh` asks the id to
+  describe itself; not-now (or no answer) means fixture. Those go to `.hunt/dock.mock`, sink
+  to the ledger tail and are re-checked on a slow rotation; `mockunflag` clears the flag the
+  moment an endpoint answers for real, so a fixed fixture is not lost forever. On a *real*
+  daemon the same read-back proves our container exists - which is how a host that merely
+  pruned us is told apart from one that never had anything. The run summary reports the count.
 - Run the hunter by hand too: `GITHUB_TOKEN=xxx ./hunt.sh all` (or `harvest` /
   `probe` separately). It needs only `curl`, `tar`, `ssh`.
 
