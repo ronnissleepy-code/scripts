@@ -50,4 +50,14 @@ if [ "$posbig" != 1 ]; then echo "FAIL big-first order"; head -3 "$T/lg3"; exit 
 if [ "$possmall" != 2 ]; then echo "FAIL small host rank (got $possmall, want 2)"; head -4 "$T/lg3"; exit 1; fi
 if [ "$(wc -l < "$T/lg3")" != "$(wc -l < "$T/lg")" ]; then echo "FAIL ledger rows lost"; exit 1; fi
 echo "PASS ledger: 8GB host first, 1MB host second, no rows lost"
+
+# --- 4. mock-flagged hosts sink to the very tail (matches the dock.sh sink) ---
+MOCK="$T/mock"
+printf '%s\n' "$first" > "$MOCK"      # pretend that ledger row is a canned-API host
+grep -vxF -f "$MOCK" "$T/lg3" > "$T/lg4" || :
+grep -xF -f "$MOCK" "$T/lg3" >> "$T/lg4" || :
+if [ "$(tail -1 "$T/lg4")" != "$first" ]; then echo "FAIL mock not sunk"; tail -3 "$T/lg4"; exit 1; fi
+if [ "$(wc -l < "$T/lg4")" != "$(wc -l < "$T/lg3")" ]; then echo "FAIL mock sink lost rows"; exit 1; fi
+if [ "$(grep -c "^$first\$" "$T/lg4")" != 1 ]; then echo "FAIL mock duplicated"; exit 1; fi
+echo "PASS mock-flagged host moved to the tail, no rows lost or duplicated"
 echo ALL-PASS

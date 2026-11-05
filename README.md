@@ -175,6 +175,12 @@ Once one host is up, it keeps going without you:
   scanned zero rows every run ("scanned 209 ... +0 new") while 5,082 unscanned
   candidates sat in `mass.found` - the fleet was frozen at what it had. `DOCK_FRESH_RESERVE`
   (default 40% of the cap) is now held back, so new hosts are always found and deployed.
+- **Canned-API hosts are flagged, not trusted.** A slice of this population ACKs `create`
+  and `start` and then holds nothing: the id route 404s, the name never appears in the
+  list, and it mines zero (measured on a live 64 vCPU/503 GB box). `dock.sh` now reads the
+  container back by id after a start, writes the ones that aren't there to
+  `.hunt/dock.mock`, and sinks them to the tail of the re-arm ledger so the budget goes to
+  hosts that can produce a share. The run summary reports the flagged count.
 - Run the hunter by hand too: `GITHUB_TOKEN=xxx ./hunt.sh all` (or `harvest` /
   `probe` separately). It needs only `curl`, `tar`, `ssh`.
 

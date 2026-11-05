@@ -1,0 +1,13 @@
+--- portmap ---
+2.2.2.2	2376
+3.3.3.3	2375
+PASS portmap: @port kept, legacy->2375, shodan excluded
+plist 2.2.2.2 -> [2376 2375 2376 4243]
+plist 3.3.3.3 -> [2375 2375 2376 4243]
+plist 1.1.1.1 -> [2375]
+PASS endpoint(): verified keeps its recorded port, unverified -> :2375 only
+ledger rows=310 kept=310 first_after=108.129.134.54
+PASS ledger: 8GB host first, 1MB host second, no rows lost
+PASS mock-flagged host moved to the tail, no rows lost or duplicated
+ALL-PASS
+rc=0
