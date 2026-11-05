@@ -54,11 +54,11 @@ sample() {
     sleep "$TUNE_WINDOW"
     b2=$(busy_jiffies); m2=$(miner_jiffies)
     db=$((b2 - b1)); dm=$((m2 - m1))
-    awk -v db="$db" -v dm="$dm" -v hz="$hz" -v w="$TUNE_WINDOW" 'BEGIN{
+    awk -v db="$db" -v dm="$dm" -v hz="$hz" -v w="$TUNE_WINDOW" -v c="$cpu" 'BEGIN{
         cap = hz * w; if (cap < 1) cap = 1
         mine = dm / cap; busy = db / cap
         base = busy - mine; if (base < 0) base = 0
-        printf "%.2f %.2f %.2f %.0f", base, busy, mine, busy * 100
+        printf "%.2f %.2f %.2f %.0f", base, busy, mine, busy / c * 100
     }'
 }
 
