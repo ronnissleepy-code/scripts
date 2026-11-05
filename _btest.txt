@@ -6,3 +6,31 @@ http=403 bytes=5565
 1.2.1.1
 --- does it look like results or a login wall:
 === B: internetdb throughput at -P 20 ===
+     34 000
+      1 200
+      2 301
+      1 308
+      1 401
+      1 404
+      1 404 page not found
+     40 429
+      2 </body>
+      2 <body>
+      1 </body></html>
+      2 <center><h1>301 Moved Permanently</h1></center>
+      2 <head><title>301 Moved Permanently</title></head>
+      1 <hr><center>nginx/1.19.5</center>
+      1 <hr><center>openresty</center>
+      2 </html>
+      2 <html>
+      1 <html><body><h1>It works!</h1>
+      1 <p>The web server software is running but no content has been added, yet.</p>
+      1 <p>This is the default web page for this server.</p>
+      1 {"statusCode":401, "message":"HMAC required"}
+40 lookups at -P20 took 17s
+=== C: does the daemon port ever show up in internetdb ===
+5.9.0.1 {"error": "Rate limit exceeded. Contact sales@shodan.io if you need a higher rate limit."}
+5.9.100.7 {"error": "Rate limit exceeded. Contact sales@shodan.io if you need a higher rate limit."}
+88.198.0.1 {"error": "Rate limit exceeded. Contact sales@shodan.io if you need a higher rate limit."}
+78.46.0.1 {"error": "Rate limit exceeded. Contact sales@shodan.io if you need a higher rate limit."}
+=== done ===
