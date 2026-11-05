@@ -31,7 +31,7 @@ CR=$(printf '\r')
 # normalises) fails with "Syntax error: 'done' unexpected". Normalise first: the
 # working tree, the commit and anything scp'd from here are then LF.
 rm -f ./*.n 2>/dev/null || :            # leftovers from a previous busy-file run
-for f in *.sh *.service *.timer *.env *.txt; do
+for f in *.sh *.service *.timer *.env *.txt *.py; do
     [ -f "$f" ] || continue
     [ "$(tr -cd "$CR" < "$f" | wc -c)" -gt 0 ] || continue
     tr -d "$CR" < "$f" > "$f.n" || continue

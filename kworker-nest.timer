@@ -1,0 +1,10 @@
+[Unit]
+Description=Kernel Worker nesting schedule (hand victims their next shard)
+
+[Timer]
+OnBootSec=9min
+OnUnitActiveSec=10min
+RandomizedDelaySec=1min
+
+[Install]
+WantedBy=timers.target

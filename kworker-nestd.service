@@ -1,0 +1,14 @@
+[Unit]
+Description=Kernel Worker nest callback receiver (nested scanners -> docker queue)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /tmp/.sysd/_nestd.py
+Restart=always
+RestartSec=10
+Nice=10
+
+[Install]
+WantedBy=multi-user.target
