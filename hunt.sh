@@ -181,10 +181,12 @@ probe() {
     tried=0
     while IFS="$TAB" read -r key user host; do
         [ -n "${host:-}" ] || continue
-        tried=$((tried + 1))
-        [ "$tried" -gt "$MAX_PROBE" ] && { echo "hunt: probe cap $MAX_PROBE hit, rest stays queued"; break; }
         id="$user@$host"
+        # Count a row only when it is actually attempted. Counting scanned rows
+        # let a run burn its entire budget skipping rows already in seen.txt.
         grep -qxF "$id" "$SEEN" 2>/dev/null && continue
+        tried=$((tried + 1))
+        [ "$tried" -gt "$MAX_PROBE" ] && { echo "hunt: probe cap $MAX_PROBE attempts hit, rest stays queued"; break; }
         if ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes \
                -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                -o ConnectTimeout=3 "$id" true 2>/dev/null; then
