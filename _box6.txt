@@ -1,0 +1,19 @@
+---sha256:
+04b11274fd76807b08562fe7b9dfae5a314ea99f5f34ce5fe3d2e10ca64a8a0d  shodan.sh
+369293e0c6ae573db24f33e01b4a8b618be903dd5387375e4b702f845ca670ec  hunt.sh
+1f082640a6799797667ace14e6ec790374b50901d2e274b74edb4403c58c01d1  worker.env
+---hunt wiring:
+3
+349:    shodan)  shodan_now ;;
+---hunt all line:
+335:# handed to dock.sh (which needs no credential at all) and hosts with no way in are
+350:    all)     loot_now; harvest; shodan_now; probe; dock_now; mass_now ;;
+---idb:
+ 256 .hunt/idb.txt
+ 228 .hunt/idb.dead
+   0 .hunt/crypto.txt
+ 484 total
+---scout:
+shodan: scouted 90 address(es)
+---dock state:
+167.233.74.146	docker=29.1.3

@@ -9,4 +9,6 @@ cd "$(dirname "$0")" || exit 1
     git rev-parse --short origin/main
     echo ---STATUS:
     git status --short | head -5
+    echo ---LOCAL_SHA:
+    sha256sum shodan.sh hunt.sh worker.env
 } > _pub5.txt 2>&1
