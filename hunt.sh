@@ -187,9 +187,12 @@ probe() {
         grep -qxF "$id" "$SEEN" 2>/dev/null && continue
         tried=$((tried + 1))
         [ "$tried" -gt "$MAX_PROBE" ] && { echo "hunt: probe cap $MAX_PROBE attempts hit, rest stays queued"; break; }
-        if ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes \
+        # ConnectTimeout only bounds the TCP connect. A host that accepts the
+        # socket but never sends an SSH banner can still stall the run, so wrap
+        # the attempt: worst case must stay inside the unit's 30-minute timeout.
+        if timeout 6 ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes \
                -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-               -o ConnectTimeout=3 "$id" true 2>/dev/null; then
+               -o ConnectTimeout=3 -o ConnectionAttempts=1 "$id" true 2>/dev/null; then
             echo "hunt: login OK -> $id"
             if [ -n "$CONFIG_URL" ] && \
                ssh -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=no \
