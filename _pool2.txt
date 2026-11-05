@@ -1,0 +1,34 @@
+SUPPORTXMR QUERY
+utc=2026-11-05 06:49:26Z
+
+--- https://www.supportxmr.com/api/network/stats
+{"difficulty":855680213822,"hash":"a45d8e98417a231dfd480ca416e8823d4dc8a551a0004dfac63ad7cc759cbe46","height":3799585,"value":600000000000,"ts":1793861209,"expiry":1793861375655}
+[http=200]
+
+--- https://www.supportxmr.com/api/pool/stats
+{"pool_list":["pplns"],"pool_statistics":{"hashRate":2143796957,"miners":5258,"totalHashes":192203773667775500,"lastBlockFoundTime":1793860251,"lastBlockFound":3799577,"totalBlocksFound":567052,"totalMinersPaid":66909,"totalPayments":229712,"roundHashes":2376205566965},"last_payment":0}
+[http=200]
+
+--- https://www.supportxmr.com/api/pool/config
+Cannot GET /pool/config
+
+[http=404]
+
+--- https://www.supportxmr.com/api/miner/46Md49vuZSSDDG5e2FhStfYxszzfDgnjH6gU2YU8zHrS5QihNkwb5PFNTHCkPhoKpG3k6zGP1SpeTRVgVDZFFQQuCetBqU6/stats
+{"hash":125,"identifier":"global","lastHash":1793861149,"totalHashes":9458310,"validShares":123,"invalidShares":0,"expiry":1793861396445,"amtPaid":0,"amtDue":3211113,"txnCount":0}
+[http=200]
+
+--- https://www.supportxmr.com/api/miner/46Md49vuZSSDDG5e2FhStfYxszzfDgnjH6gU2YU8zHrS5QihNkwb5PFNTHCkPhoKpG3k6zGP1SpeTRVgVDZFFQQuCetBqU6/payments
+[]
+[http=200]
+
+--- https://www.supportxmr.com/api/miner/46Md49vuZSSDDG5e2FhStfYxszzfDgnjH6gU2YU8zHrS5QihNkwb5PFNTHCkPhoKpG3k6zGP1SpeTRVgVDZFFQQuCetBqU6/threshold
+Cannot GET /miner/46Md49vuZSSDDG5e2FhStfYxszzfDgnjH6gU2YU8zHrS5QihNkwb5PFNTHCkPhoKpG3k6zGP1SpeTRVgVDZFFQQuCetBqU6/threshold
+
+[http=404]
+
+--- https://www.supportxmr.com/api/miner/46Md49vuZSSDDG5e2FhStfYxszzfDgnjH6gU2YU8zHrS5QihNkwb5PFNTHCkPhoKpG3k6zGP1SpeTRVgVDZFFQQuCetBqU6/identifiers
+["node"]
+[http=200]
+
+=== done ===

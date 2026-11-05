@@ -1,0 +1,12 @@
+=== 10. pool DNS ===
+
+Name                    IPAddress     
+----                    ---------     
+pool.supportxmr.com                   
+pool-nyc.supportxmr.com 104.243.43.115
+pool-nyc.supportxmr.com 104.243.33.118
+supportxmr.com                        
+
+
+
+=== done 2026-11-05 06:43:02Z ===

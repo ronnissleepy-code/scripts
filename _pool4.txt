@@ -1,0 +1,35 @@
+POOL RATE + FEE SAMPLE
+t1=06:51:33 {"hash":250,"identifier":"global","lastHash":1793861480,"totalHashes":9533310,"validShares":124,"invalidShares":0,"expiry":1793861522389,"amtPaid":0,"amtDue":3578217,"txnCount":0}
+
+--- pool strings mentioning fee / instant / force
+  'min_inst': 0.01,										//minimum for instant pay
+  'min_auto': 0.1,											//minimum for automatic threshold
+  'fee': {'lbl': 'Fee (' + $Q['cur']['sym'] + ')', 'cls': 'right'}
+  var t = $Q['pay']['min_inst'] + ' ' + $Q['cur']['sym'] + ' ' + $$['trn']['min'],
+  if ($A[addr]['due'] >= $Q['pay']['min_inst']) {
+  t = 'Pay ' + $A[addr]['due'] + ' ' + $Q['cur']['sym'] + ' Now (for 0.001 XMR fee!)';
+  api('forcepayment').then(function (sts) {
+  if (sts && sts['msg'] && sts['msg'] === 'Payout scheduled') {
+  if (val_num < $Q['pay']['min_auto']) {
+  b_ins = $Q['pay']['min_auto'] + ' ' + $Q['cur']['sym'] + ' ' + $$['trn']['min'];
+  } else if (val_num >= $Q['pay']['min_auto']) {
+  '<p>This pool uses PPLNS to determine payouts. It helps to combat pool hopping and ensures a good payout for miners.<br>Once you started mining, it will take around 2 hours until your balance starts m
+  '<p>' + Perc('0.6') + ' Pool Fee</p>' +
+  '<p>0.1 XMR Default Payout</p>' +
+  } else if (m === 'forcepayment') {
+  url = 'user/forcePayment';
+  'fee': Rnd((v['fee'] / 1000000000000), 8, 'txt')
+  } else if (['user', 'updatethreshold', 'forcepayment', 'toggleEmail', 'updateTariAddress', 'tariAddress'].indexOf(m) >= 0) {
+  $A[addr]['threshold'] = Rnd((d['msg']['payout_threshold'] / 1000000000000), 8);
+  } else if (m === 'forcepayment') {
+  if (['updatethreshold', 'forcepayment', 'toggleEmail', 'updateTariAddress'].indexOf(m) >= 0) {
+
+--- network + pool now
+{"difficulty":855696990294,"hash":"1a81ab796077679c24c7df050d8f7d14984b66e9577788ac93f49ed7b9679508","height":3799587,"value":600000000000,"ts":1793861395,"expiry":1793861502972}
+{"pool_list":["pplns"],"pool_statistics":{"hashRate":2142802472,"miners":5259,"totalHashes":192204047103774530,"lastBlockFoundTime":1793861404,"lastBlockFound":3799587,"totalBlocksFound":567053,"totalMinersPaid":66909,"totalPayments":229712,"roundHashes":184403985089},"last_payment":0}
+
+t2=06:52:19 {"hash":250,"identifier":"global","lastHash":1793861480,"totalHashes":9533310,"validShares":124,"invalidShares":0,"expiry":1793861568605,"amtPaid":0,"amtDue":3578217,"txnCount":0}
+
+due1=0 due2=0 delta=0 piconero over 45s
+=> xmr/day = 0
+=== done ===

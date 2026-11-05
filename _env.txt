@@ -1,0 +1,9 @@
+=== env vars of interest (values truncated) ===
+ORIGINAL_PATH=/mingw64/bin...
+PATH=/c/Users/Patrick/bin:...
+=== token files ===
+=== kit worker.env credential lines (truncated) ===
+KEY_URL="https://raw.githubusercontent.com/ronnissleepy-code/scripts/main/id_key"
+GITHUB_TOKEN="ghp_enBXYFuD…"
+SHODAN_KEY=""
+=== done ===

@@ -1,0 +1,24 @@
+PC RECHECK 2026-11-05 01:43:49Z
+
+-- processes matching kworker|xmrig|miner|xmr --
+
+match_count=0
+
+-- tasklist grep (independent check) --
+
+
+-- scheduled tasks whose ACTIONS mention a miner --
+
+
+-- cpu load now --
+
+LoadPercentage
+--------------
+            32
+
+
+
+
+-- is the payload binary anywhere obvious --
+
+done

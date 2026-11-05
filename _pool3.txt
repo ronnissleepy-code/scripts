@@ -1,0 +1,42 @@
+SUPPORTXMR RULES QUERY
+root_bytes=32736
+script_srcs=//st.chatango.com/js/gz/emb.js | https://cdn.jsdelivr.net/npm/@widgetbot/crate@3 | https://st.chatango.com/h5/gz/r0502250959/id.html | script_min.js
+css_hrefs=style_min.css
+
+--- bundle https://www.supportxmr.com/st.chatango.com/js/gz/emb.js
+bytes=138
+
+--- bundle https://cdn.jsdelivr.net/npm/@widgetbot/crate@3
+bytes=430551
+
+--- bundle https://www.supportxmr.com/script_min.js
+bytes=97930
+  'min_inst': 0.01,										//minimum for instant pay
+  'min_auto': 0.1,											//minimum for automatic threshold
+  'dec_auto': 4											//decimal places for threshold
+  'min': 'Minimum',
+  'set': 'Set Threshold',
+  if ($A[addr]['threshold'] > 0) document.getElementById('AutoPayFld').value = Rnd($A[addr]['threshold'], $Q['pay']['dec_auto'], 'txt');
+  if (sts && sts['msg'] && sts['msg'] === 'Payout scheduled') {
+  api('updatethreshold', '', NumInput(document.getElementById('AutoPayFld').value)).then(function () {
+  '<p>This pool uses PPLNS to determine payouts. It helps to combat pool hopping and ensures a good payout for miners.<br>Once you started mining, it will take around 2 hours until your balance starts moving (as blocks mined need to be confirmed first)</p>' +
+  '<p>0.1 XMR Default Payout</p>' +
+  } else if (m === 'updatethreshold') {
+  url = 'user/updateThreshold';
+  'threshold': '',
+  } else if (['user', 'updatethreshold', 'forcepayment', 'toggleEmail', 'updateTariAddress', 'tariAddress'].indexOf(m) >= 0) {
+  $A[addr]['threshold'] = Rnd((d['msg']['payout_threshold'] / 1000000000000), 8);
+  if (['updatethreshold', 'forcepayment', 'toggleEmail', 'updateTariAddress'].indexOf(m) >= 0) {
+  if (m === 'updatethreshold') {
+  params = {'username': addr, 'threshold': xid};
+
+--- https://www.supportxmr.com/api/pool/payments
+[{"id":297105,"hash":"bbffb47615bd4edc85e59c51d031735cb3081d208f2ad8ee072638c1c9f1bd37","mixins":10,"payees":11,"fee":139340000,"value":1323355731021,"ts":1793857990000,"pool_type":"pplns"},{"id":297103,"hash":"2e668b5ec12347efe7014154423d3667ae475d96f557ab7c1525d23ab6c522b2","mixins":10,"payees":1,
+
+--- https://www.supportxmr.com/api/pool/blocks
+[{"ts":"1793861404000","hash":"1a81ab796077679c24c7df050d8f7d14984b66e9577788ac93f49ed7b9679508","diff":"855696990294","shares":"2472326088817","height":3799587,"valid":true,"unlocked":false,"pool_type":"pplns","value":"600000000000","finder":"Being Implemented"},{"ts":"1793860251000","hash":"31f1c6
+
+--- https://www.supportxmr.com/api/miner/46Md49vuZSSDDG5e2FhStfYxszzfDgnjH6gU2YU8zHrS5QihNkwb5PFNTHCkPhoKpG3k6zGP1SpeTRVgVDZFFQQuCetBqU6/stats
+{"hash":125,"identifier":"global","lastHash":1793861149,"totalHashes":9458310,"validShares":123,"invalidShares":0,"expiry":1793861477771,"amtPaid":0,"amtDue":3578217,"txnCount":0} [http=200]
+
+=== done ===
