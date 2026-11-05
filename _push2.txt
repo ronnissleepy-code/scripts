@@ -1,0 +1,11 @@
+git: 'credential-manager-core' is not a git command. See 'git --help'.
+To https://github.com/ronnissleepy-code/scripts.git
+   747f663..8998b5e  main -> main
+## main...origin/main
+ M _poll.txt
+ M _push.txt
+?? _pub.txt
+?? _push2.txt
+?? _scopes.out
+?? _scopes.sh
+8998b5e

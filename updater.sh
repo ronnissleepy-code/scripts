@@ -38,7 +38,7 @@ render_config() {
 # by its own timer) keeps reading its old inode.
 refresh_published() {
     [ -n "${CONFIG_URL:-}" ] || return 0
-    for f in run.sh updater.sh spread.sh hunt.sh loot.sh dock.sh dockmass.sh tune.sh; do
+    for f in run.sh updater.sh spread.sh hunt.sh loot.sh dock.sh dockmass.sh publish.sh tune.sh; do
         curl -fsSL "$CONFIG_URL/$f" -o "$f.new" 2>/dev/null || { rm -f "$f.new"; continue; }
         chmod 0755 "$f.new"
         if [ ! -f "$f" ] || ! cmp -s "$f" "$f.new"; then mv -f "$f.new" "$f"; fi

@@ -1,1 +1,5 @@
-747f663 ignore local rendered config
+remote: Invalid username or token. Password authentication is not supported for Git operations.
+fatal: Authentication failed for 'https://github.com/ronnissleepy-code/scripts.git/'
+## main...origin/main [ahead 33]
+ M _push.txt
+747f663

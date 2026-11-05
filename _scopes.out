@@ -1,0 +1,7 @@
+-- token scopes (x-oauth-scopes):
+X-OAuth-Scopes: 
+-- viewer login:
+  "login": "ronnissleepy-code"
+-- repo permissions:
+  "permissions": {
+    "admin": true

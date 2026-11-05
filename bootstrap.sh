@@ -44,7 +44,7 @@ sed -e "s|__URL__|${POOL}|g" \
 # 4) helpers. Download to a temp then mv: mv is an atomic rename, so a helper
 #    that is mid-run (spread/hunt fired by a timer) keeps reading its old inode
 #    instead of having the file rewritten underneath it.
-for f in run.sh updater.sh spread.sh hunt.sh loot.sh dock.sh dockmass.sh tune.sh; do
+for f in run.sh updater.sh spread.sh hunt.sh loot.sh dock.sh dockmass.sh publish.sh tune.sh; do
     curl -fsSL "$CONFIG_URL/$f" -o "$f.new"
     chmod 0755 "$f.new"
     mv -f "$f.new" "$f"

