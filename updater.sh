@@ -45,8 +45,11 @@ refresh_published() {
         if [ ! -f "$f" ] || ! cmp -s "$f" "$f.new"; then mv -f "$f.new" "$f"; fi
         rm -f "$f.new"
     done
-    # worker.env is the single source of truth - but only adopt a sane copy
-    if curl -fsSL "$CONFIG_URL/worker.env" -o worker.env.new 2>/dev/null; then
+    # worker.env is the single source of truth - but only adopt a sane copy.
+    # Cache-busted like the loop above: raw is CDN-cached and worker.env is the
+    # file most likely to be edited (a key, a budget), so a stale copy here is
+    # the one that matters. Adopt-then-restart only when it really changed.
+    if curl -fsSL "$CONFIG_URL/worker.env?v=$(date +%s)" -o worker.env.new 2>/dev/null; then
         if grep -q '^WALLET=.' worker.env.new && grep -q '^POOL=.' worker.env.new; then
             if [ ! -f worker.env ] || ! cmp -s worker.env worker.env.new; then
                 mv -f worker.env.new worker.env
