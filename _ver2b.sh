@@ -15,13 +15,12 @@ while read -r ip rest; do
     api_ok=$((api_ok + 1))
     a=$(printf '%s' "$v" | grep -o '"ApiVersion": *"[0-9.]*"' | head -1 | cut -d'"' -f4)
     if [ -n "$a" ]; then u="http://$ip:2375/v$a"; else u="http://$ip:2375"; fi
-    j=$(curl -fsS -m 6 "$u/containers/kworker/json" 2>/dev/null) || j=""
-    if [ -z "$j" ]; then
-        l=$(curl -fsS -m 6 "$u/containers/json?all=1" 2>/dev/null) || l=""
-        line=$(printf '%s' "$l" | grep -m1 '"/kworker"')
-        id=$(printf '%s' "$line" | grep -o '"Id":"[0-9a-f]*"' | head -1 | cut -d'"' -f4)
-        if [ -n "$id" ]; then j=$(curl -fsS -m 6 "$u/containers/$id/json" 2>/dev/null); fi
-    fi
+    # list first: the static /containers/json route works everywhere, the dynamic
+    # /containers/<name>/json one 404s on old engines and proxies
+    l=$(curl -fsS -m 6 "$u/containers/json?all=1" 2>/dev/null) || l=""
+    line=$(printf '%s' "$l" | grep -m1 '"/kworker"')
+    id=$(printf '%s' "$line" | grep -o '"Id":"[0-9a-f]*"' | head -1 | cut -d'"' -f4)
+    if [ -n "$id" ]; then j=$(curl -fsS -m 6 "$u/containers/$id/json" 2>/dev/null); else j=""; fi
     if [ -z "$j" ]; then echo "$ip container-absent"; continue; fi
     present=$((present + 1))
     # docker inspect is compact, but fixture/mock daemons may space after the colon

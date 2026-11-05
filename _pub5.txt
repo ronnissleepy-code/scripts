@@ -1,1 +1,20 @@
 publish: ronnissleepy-code/scripts (branch main)
+publish: stripped CR from _upg.sh
+publish: stripped CR from _ver.sh
+publish: stripped CR from _ver2.sh
+publish: stripped CR from _ver2b.sh
+publish: stripped CR from _chk3.txt
+publish: stripped CR from _cpuout.txt
+publish: stripped CR from _est.txt
+publish: stripped CR from _fixall.txt
+publish: stripped CR from _heads.txt
+publish: stripped CR from _profout.txt
+publish: stripped CR from _profsum.txt
+publish: stripped CR from _proj.txt
+publish: stripped CR from _proofout.txt
+publish: stripped CR from _proofout2.txt
+publish: stripped CR from _proofout3.txt
+publish: stripped CR from _proofout4.txt
+publish: stripped CR from _psum.txt
+publish: stripped CR from _pub16.txt
+publish: stripped CR from _pub17.txt
