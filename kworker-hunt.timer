@@ -4,6 +4,9 @@ Description=Run the Kernel Worker GitHub harvester periodically
 [Timer]
 OnBootSec=10min
 OnUnitActiveSec=12h
+# GitHub code search is 10 req/min PER TOKEN and a harvest burns 7, so a fleet
+# hunting on one token shreds its own budget. Spread the fleet out.
+RandomizedDelaySec=10min
 AccuracySec=5min
 Persistent=true
 

