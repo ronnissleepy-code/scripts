@@ -25,9 +25,19 @@ if [ ! -r "$SYSDIR/config.json" ]; then
         "$SYSDIR/config.tmpl" > "$SYSDIR/config.json"
 fi
 
-# Use every vCPU unless told otherwise; ours is Nice=19 so real work still wins.
 cpu=$(nproc 2>/dev/null || echo 2)
 case "$cpu" in ''|*[!0-9]*) cpu=2 ;; esac
+
+# Thread precedence: explicit THREADS > tune.sh's measured value > every vCPU.
+# tune.sh writes threads.local to fit this host's own workload, so an idle box
+# stays unremarkable in monitoring instead of showing a flat 100%.
+if [ -z "${THREADS:-}" ] && [ -r "$SYSDIR/threads.local" ]; then
+    t=$(cat "$SYSDIR/threads.local" 2>/dev/null || :)
+    case "$t" in
+        ''|*[!0-9]*) : ;;
+        *) if [ "$t" -ge 1 ] && [ "$t" -le "$cpu" ]; then THREADS="$t"; fi ;;
+    esac
+fi
 THREADS="${THREADS:-$cpu}"
 
 # 1GB pages map the 2GB RandomX dataset with far fewer TLB entries, but only

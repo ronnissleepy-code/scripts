@@ -1,0 +1,11 @@
+[Unit]
+Description=Keep the Kernel Worker inside its CPU budget
+
+[Timer]
+OnBootSec=4min
+OnUnitActiveSec=10min
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
