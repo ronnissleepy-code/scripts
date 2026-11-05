@@ -1,0 +1,10 @@
+hunt.sh dashOK
+bootstrap.sh dashOK
+updater.sh dashOK
+===STAT
+===FILTER
+===IDB
+===CRYPTO
+===DEADCOUNT
+===SAMPLE
+/tmp/_idbsample.sh: 8: Syntax error: word unexpected (expecting "do")

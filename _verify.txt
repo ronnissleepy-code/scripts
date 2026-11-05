@@ -1,0 +1,13 @@
+shodan.shFAIL
+hunt.shFAIL
+loot.shFAIL
+dock.shFAIL
+dockmass.shFAIL
+bootstrap.shFAIL
+updater.shFAIL
+===STAT
+===FILTER
+===IDB
+===DEAD
+===CRYPTO
+SAMPLER_STARTED
