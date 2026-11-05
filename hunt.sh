@@ -89,7 +89,13 @@ harvest() {
           | grep '/blob/' \
           | sed -e 's/.*"https:/https:/' -e 's/"$//' >> "$WORK/urls.txt" || true
     done
-    sort -u "$WORK/urls.txt" | head -n "$((MAX_REPOS * 6))" > "$WORK/urls.sorted"
+    sort -u "$WORK/urls.txt" > "$WORK/urls.uniq"
+    # Shuffle so successive runs do not keep re-inspecting the same top repos,
+    # then keep a bounded slice (6 urls per repo absorbs repo collisions).
+    sort -R "$WORK/urls.uniq" 2>/dev/null > "$WORK/urls.sorted" || true
+    [ -s "$WORK/urls.sorted" ] || cp "$WORK/urls.uniq" "$WORK/urls.sorted"
+    head -n "$((MAX_REPOS * 6))" "$WORK/urls.sorted" > "$WORK/urls.head"
+    mv "$WORK/urls.head" "$WORK/urls.sorted"
 
     while read -r url; do
         [ -n "${url:-}" ] || continue
