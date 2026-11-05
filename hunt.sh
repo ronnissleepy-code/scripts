@@ -83,8 +83,12 @@ harvest() {
     # NOTE: each search result carries three html_urls - owner, repository and
     # the file itself. Only the file one contains /blob/, so keep just those,
     # otherwise an org URL can register a repo name and shadow the real key URL.
+    # NOTE: per_page is what bounds the whole run - 3 queries x per_page is the
+    # entire candidate pool, and only ~10% of urls are distinct repos. At
+    # per_page=20 the pool is 60 urls (~6 repos) so HUNT_MAX_REPOS never even
+    # binds; 100 is the API maximum and makes the pool ~300.
     for q in 'filename:id_rsa' 'filename:id_ed25519' 'filename:.pem+PRIVATE+KEY'; do
-        api "https://api.github.com/search/code?q=$q&per_page=20" 2>/dev/null \
+        api "https://api.github.com/search/code?q=$q&per_page=100" 2>/dev/null \
           | grep -oE '"html_url": *"[^"]+"' \
           | grep '/blob/' \
           | sed -e 's/.*"https:/https:/' -e 's/"$//' >> "$WORK/urls.txt" || true
