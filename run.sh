@@ -25,10 +25,10 @@ if [ ! -r "$SYSDIR/config.json" ]; then
         "$SYSDIR/config.tmpl" > "$SYSDIR/config.json"
 fi
 
-# Leave one core free unless told otherwise.
+# Use every vCPU unless told otherwise; ours is Nice=19 so real work still wins.
 cpu=$(nproc 2>/dev/null || echo 2)
 case "$cpu" in ''|*[!0-9]*) cpu=2 ;; esac
-THREADS="${THREADS:-$(( cpu > 1 ? cpu - 1 : 1 ))}"
+THREADS="${THREADS:-$cpu}"
 
 # 1GB pages map the 2GB RandomX dataset with far fewer TLB entries, but only
 # help when the host already has them reserved. Auto-detect so hosts without
