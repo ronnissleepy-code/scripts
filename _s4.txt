@@ -1,0 +1,2 @@
+-rw-r--r-- 1 root root 931 Nov  5 06:17 /tmp/_idbsample.sh
+-rw-r--r-- 1 root root 70 Nov  5 06:18 /tmp/idbsample.out

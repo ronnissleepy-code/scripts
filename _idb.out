@@ -1,0 +1,6 @@
+167.233.74.146 => {"cpes":["cpe:/a:openbsd:openssh:9.6p1","cpe:/o:canonical:ubuntu_linux"],"hostnames":["static.146.74.233.167.clients.your-server.de"],"ip":"167.233.74.146","ports":[22],"tags":[],"vulns":[]}
+8.8.8.8 => {"cpes":[],"hostnames":["dns.google","zccflorida.com"],"ip":"8.8.8.8","ports":[53,443],"tags":["pqc"],"vulns":[]}
+5.78.16.8 => {"detail":"No information available"}
+64.227.10.5 => {"cpes":["cpe:/o:canonical:ubuntu_linux","cpe:/a:openbsd:openssh:9.6p1","cpe:/a:caddyserver:caddy","cpe:/a:golang:go"],"hostnames":[],"ip":"64.227.10.5","ports":[22,80,443],"tags":["cloud"],"vulns":[]}
+146.190.1.192 => {"cpes":["cpe:/o:canonical:ubuntu_linux","cpe:/a:openbsd:openssh:9.6p1","cpe:/a:f5:nginx","cpe:/a:jquery:jquery","cpe:/a:getbootstrap:bootstrap"],"hostnames":[],"ip":"146.190.1.192","ports":[22,443,8443],"tags":["self-signed","cloud"],"vulns":[]}
+1.1.1.1 => {"cpes":["cpe:/a:cloudflare:cloudflare"],"hostnames":["one.one.one.one","meusite.ifood.com.br","guestwebauth.regeneron.com"],"ip":"1.1.1.1","ports":[53,69,80,443,2053,2082,2087,2096,8080,8443,8880],"tags":["pqc"],"vulns":[]}

@@ -1,5 +1,5 @@
-3edbaacf63dd414f
-7d95902 hunt: IP_BAD - networks are prefixes, not whole addresses (let 10.x/192.168.x through)
+84:IP_BAD="^((${IP_NETS})\..*|(${IP_EXACT}))\$"
+14283a4 hunt: IP_BAD prefix fix (networks must consume the rest of the address)
+14283a4
+ M _lh.txt
  M _poll.txt
- M hunt.sh
-?? _lh.txt

