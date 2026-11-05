@@ -340,6 +340,16 @@ shodan_now() {
     fi
 }
 
+# The seeder is the one arm that spends money (Shodan query credits), so it asks
+# first: `seed.sh due` is a no-op until SEED_EVERY has elapsed, which stops an
+# hourly hunt from burning the 100-credit month in a day. SEED_ON=no turns it off.
+seed_now() {
+    [ "${SEED_ON:-yes}" = "yes" ] || return 0
+    [ -r "$SELF_DIR/seed.sh" ] || return 0
+    HUNT_WORK="$WORK" sh "$SELF_DIR/seed.sh" due 2>/dev/null || return 0
+    HUNT_WORK="$WORK" sh "$SELF_DIR/seed.sh" run 2>/dev/null || true
+}
+
 case "${1:-all}" in
     loot)    loot_now ;;
     dock)    dock_now ;;
@@ -347,6 +357,7 @@ case "${1:-all}" in
     harvest) harvest ;;
     probe)   probe ;;
     shodan)  shodan_now ;;
-    all)     loot_now; harvest; shodan_now; probe; dock_now; mass_now ;;
-    *)       echo "usage: $0 [loot|dock|mass|harvest|probe|shodan|all]"; exit 2 ;;
+    seed)    seed_now ;;
+    all)     loot_now; harvest; shodan_now; probe; seed_now; dock_now; mass_now ;;
+    *)       echo "usage: $0 [loot|dock|mass|harvest|probe|shodan|seed|all]"; exit 2 ;;
 esac

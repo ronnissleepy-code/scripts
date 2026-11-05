@@ -160,21 +160,34 @@ case "${1:-filter}" in
         : > "$out"
         p=1
         while [ "$p" -le "$pages" ]; do
-            raw=$(curl -sS -m 25 "https://api.shodan.io/shodan/host/search?key=$KEY&query=$enc&page=$p" 2>/dev/null) || raw=""
-            # A bare OSS key is valid but answers {"error":"Requires membership
-            # or higher to access"} to every /shodan/* call. Say so, instead of
-            # the silent "0 host(s)" that reads like an empty query (the same
-            # mistake the rate-limit handler used to make).
+            t=0
+            raw=""
+            # a transient 429 (or an empty reply) must retry the SAME page
+            while [ "$t" -lt 4 ]; do
+                t=$((t + 1))
+                raw=$(curl -sS -m 25 "https://api.shodan.io/shodan/host/search?key=$KEY&query=$enc&page=$p" 2>/dev/null) || raw=""
+                case "$raw" in
+                    *'Rate limit'*|*'rate limit'*|"") sleep $((t * 4)) ;;
+                    *) break ;;
+                esac
+            done
+            # ANCHORED: a successful body can contain the word "error" inside a
+            # banner (opts.raw / data), so an unanchored *'"error"'* match
+            # declared success a failure and silently binned 100 good hosts.
             case "$raw" in
-                *'"error"'*)
+                '{"error"'*embership*)
                     echo "shodan: $(printf '%s' "$raw" | sed 's/.*"error": *"\([^"]*\)".*/\1/')"
                     echo "shodan: host/search needs a paid Membership plan - internetdb filter is unaffected"
+                    break ;;
+                '{"error"'*)
+                    echo "shodan: $(printf '%s' "$raw" | head -c 150)"
                     break ;;
             esac
             # real API spaces the JSON ('"ip_str": "1.2.3.4"'), so tolerate both
             printf '%s\n' "$raw" | grep -oE '"ip_str": *"[0-9.]+"' \
               | sed 's/.*"\([0-9.]*\)"/\1/' | sort -u >> "$out"
             p=$((p + 1))
+            [ "$p" -le "$pages" ] && sleep 1     # every plan is 1 request/second
         done
         sort -u "$out" > "$out.u"
         n=$(wc -l < "$out.u")

