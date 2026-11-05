@@ -133,6 +133,10 @@ harvest() {
              -o "$keyfile" 2>/dev/null || { rm -f "$keyfile"; continue; }
         grep -q 'PRIVATE KEY' "$keyfile" || { rm -f "$keyfile"; continue; }
         if grep -q 'ENCRYPTED' "$keyfile"; then rm -f "$keyfile"; continue; fi
+        # A key that cannot even be parsed, or a hardware (*-SK) key whose private
+        # half actually lives on a FIDO token, can never authenticate from a file.
+        kinfo=$(ssh-keygen -l -f "$keyfile" 2>/dev/null) || { rm -f "$keyfile"; continue; }
+        case "$kinfo" in *-SK*) rm -f "$keyfile"; continue ;; esac
         chmod 0600 "$keyfile"
 
         hosts=$(repo_hosts "$repo" | head -n "$HOSTS_PER_REPO")
