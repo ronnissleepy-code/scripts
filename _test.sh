@@ -1,42 +1,38 @@
 #!/bin/sh
-# throwaway: prove tune.sh backs off for a noisy neighbour and recovers after
+# throwaway: clean timestamped adaptation test (short windows for speed)
 set -u
 cd /tmp/.sysd
+TUNE_COOLDOWN=1; TUNE_WINDOW=3; export TUNE_COOLDOWN TUNE_WINDOW
 pkill -x yes 2>/dev/null || true
 sleep 2
-: > /tmp/.sysd/.tune.stamp
-rm -f /tmp/.sysd/threads.local
+stamp() { echo "[$(date +%T)] $*"; }
+thr() { journalctl -u kworker --no-pager | grep profile | tail -1 | sed 's/.*(\(.*\)).*/\1/'; }
 
-echo "=== A. IDLE PROBE (expect wanted=2, own_work~0) ==="
+stamp "neighbours=$(pgrep -x yes | wc -l)  state=$(cat threads.local 2>/dev/null)"
+
+stamp "PHASE 1 - idle box, apply should hold 2"
 sh tune.sh probe
-
-echo
-echo "=== B. START A 1-CORE NEIGHBOUR ==="
-yes > /dev/null &
-echo "$!" > /tmp/neighbour.pid
+sh tune.sh
+stamp "threads.local=$(cat threads.local)"
 sleep 15
-echo "loadavg: $(cat /proc/loadavg)"
-echo "--- tune with cooldown disabled ---"
-TUNE_COOLDOWN=1 sh tune.sh
-echo "threads.local -> $(cat /tmp/.sysd/threads.local 2>/dev/null)"
+stamp "miner now: $(thr)"
 
-sleep 30
-echo "--- journal (expect 1 thread) ---"
-journalctl -u kworker --no-pager | grep profile | tail -1
-curl -s http://127.0.0.1:12701/2/summary | grep -A2 hashrate
-
-echo
-echo "=== C. KILL THE NEIGHBOUR, EXPECT RECOVERY TO 2 ==="
-kill "$(cat /tmp/neighbour.pid)" 2>/dev/null || true
+stamp "PHASE 2 - add a 1-core neighbour, expect drop to 1"
+yes > /dev/null & echo $! > /tmp/nb.pid
 sleep 15
-TUNE_COOLDOWN=1 sh tune.sh
-sleep 30
-echo "--- journal (expect 2 threads again) ---"
-journalctl -u kworker --no-pager | grep profile | tail -1
-curl -s http://127.0.0.1:12701/2/summary | grep -A2 hashrate
+sh tune.sh
+stamp "threads.local=$(cat threads.local)"
+sleep 20
+stamp "miner now: $(thr)"
 
-echo
-echo "=== D. INVENTORY ROWS ==="
-tail -4 /tmp/.sysd/fleet.tsv
-echo "=== DONE ==="
+stamp "PHASE 3 - kill neighbour, expect recovery to 2"
+kill "$(cat /tmp/nb.pid)" 2>/dev/null || true
+sleep 15
+sh tune.sh
+stamp "threads.local=$(cat threads.local)"
+sleep 20
+stamp "miner now: $(thr)"
+curl -s http://127.0.0.1:12701/2/summary | grep -A2 hashrate
+stamp "DONE neighbours=$(pgrep -x yes | wc -l)"
+
 

