@@ -29,6 +29,7 @@ HITLOG = "/tmp/_nestd.hits"
 
 lock = threading.Lock()
 known = set()
+TALLY = {"hits": 0, "fresh": 0}
 
 
 def load_known():
@@ -52,15 +53,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         ip = (q.get("ip") or [""])[0].strip()
         who = (q.get("f") or [""])[0].strip()
         if u.path == "/hit" and ip:
-            fresh = False
             with lock:
-                if ip not in known:
+                fresh = ip not in known
+                TALLY["hits"] += 1
+                if fresh:
                     known.add(ip)
-                    fresh = True
+                    TALLY["fresh"] += 1
                     with open(MASS, "a") as fh:
                         fh.write("%s\tnest\n" % ip)
-                    with open(HITLOG, "a") as fh:
-                        fh.write("%s\t%s\t%s\n" % (time.strftime("%H:%M:%S"), ip, who))
+                # Log EVERY hit, not just fresh ones. The cursor spends its first
+                # passes inside already-swept space, so a healthy scanner mostly
+                # reports addresses we already know - and when only fresh hits were
+                # logged, "1 hit" was indistinguishable from "the scanner is dead".
+                with open(HITLOG, "a") as fh:
+                    fh.write("%s\t%s\t%s\t%s\n" % (time.strftime("%H:%M:%S"), ip, "fresh" if fresh else "dup", who))
             self.send_response(200)
             self.end_headers()
             self.wfile.write(b"ok" if fresh else b"dup")
@@ -76,13 +82,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "text/plain")
             self.end_headers()
-            hits = 0
-            try:
-                with open(HITLOG) as fh:
-                    hits = sum(1 for _ in fh)
-            except FileNotFoundError:
-                pass
-            self.wfile.write(("known=%d hitlines=%d\n" % (len(known), hits)).encode())
+            self.wfile.write(("known=%d hits=%d fresh=%d\n" % (len(known), TALLY["hits"], TALLY["fresh"])).encode())
             return
         self.send_response(404)
         self.end_headers()

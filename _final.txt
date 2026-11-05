@@ -1,3 +1,0 @@
-staged_dirty=15
-head=543bca3
-origin=543bca3
