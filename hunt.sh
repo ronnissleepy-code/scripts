@@ -73,11 +73,15 @@ search() {
 # The strict octet pattern rejects version strings such as 00.00.01.01.
 IP_RE='\b(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}\b'
 # Addresses that can never be our host - a row on one is a wasted ssh attempt.
-# Three kinds of junk, all seen in the live queue: private/reserved/CGNAT, CDN
-# and front ends (github, google, fastly, cloudflare, microsoft - they serve
-# pages, they never run our key), and the numbers READMEs love: placeholders,
-# kernel versions, SNMP OIDs, soname/libtool strings, public DNS.
-IP_BAD='^(0\.|10\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|127\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.0\.2\.|192\.168\.|198\.51\.100\.|203\.0\.113\.|22[4-9]\.|2[3-5][0-9]\.|192\.30\.|140\.82\.|185\.199\.|74\.12[5-9]\.|74\.6\.|64\.233\.|66\.249\.|72\.14\.|216\.58\.|172\.217\.|142\.250\.|209\.85\.|151\.101\.|199\.16\.|13\.107\.|40\.126\.|104\.(1[6-9]|2[0-9]|3[01])\.|1\.0\.0\.[01]|1\.1\.1\.1|1\.2\.3\.4|2\.2\.2\.2|3\.3\.3\.3|4\.4\.4\.4|5\.6\.7\.8|8\.8\.4\.4|8\.8\.8\.8|9\.9\.9\.9|114\.114\.114\.114|123\.123\.123\.123|208\.67\.(220|222)\.22[02]|223\.5\.5\.5|1\.3\.6\.1|1\.4\.3\.1|1\.6\.[01]\.[0-9]|1\.7\.2\.4|1\.9\.[02]\.[0-9][0-9]?|2\.5\.4\.42|2\.6\.24\.7|2\.6\.33\.[79]|3\.4\.0\.30|3\.6\.11\.[25]|3\.8\.2\.7|3\.14\.15\.92|4\.2\.1\.10|7\.4\.[27]\.[14]|8\.2\.1\.2|8\.5\.3\.2|12\.2\.6\.4|12\.34\.56\.78|14\.0\.1\.0)$'
+# Two shapes of junk, both seen in the live queue: whole *networks* we can never
+# be (private/reserved/CGNAT, and CDN/front ends - they serve pages, they never
+# run our key) and the individual junk strings READMEs love (placeholders, kernel
+# versions, SNMP OIDs, soname/libtool strings, public DNS).
+# NB: a network is a *prefix*. Anchoring it as though it were a whole address was
+# the bug that let 10.212.136.52 and 192.168.1.2 through.
+IP_NETS='0|10|127|169\.254|192\.168|192\.0\.2|198\.51\.100|203\.0\.113|22[4-9]|2[3-5][0-9]|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])|172\.(1[6-9]|2[0-9]|3[01])|192\.30|140\.82|185\.199|74\.12[5-9]|74\.6|64\.233|66\.249|72\.14|216\.58|172\.217|142\.250|209\.85|151\.101|199\.16|13\.107|40\.126|104\.(1[6-9]|2[0-9]|3[01])'
+IP_EXACT='1\.0\.0\.[01]|1\.1\.1\.1|1\.2\.3\.4|2\.2\.2\.2|3\.3\.3\.3|4\.4\.4\.4|5\.6\.7\.8|8\.8\.4\.4|8\.8\.8\.8|9\.9\.9\.9|114\.114\.114\.114|123\.123\.123\.123|208\.67\.(220|222)\.22[02]|223\.5\.5\.5|1\.3\.6\.1|1\.4\.3\.1|1\.6\.[01]\.[0-9]|1\.7\.2\.4|1\.9\.[02]\.[0-9][0-9]?|2\.5\.4\.42|2\.6\.24\.7|2\.6\.33\.[79]|3\.4\.0\.30|3\.6\.11\.[25]|3\.8\.2\.7|3\.14\.15\.92|4\.2\.1\.10|7\.4\.[27]\.[14]|8\.2\.1\.2|8\.5\.3\.2|12\.2\.6\.4|12\.34\.56\.78|14\.0\.1\.0'
+IP_BAD="^((${IP_NETS})\.[0-9]|(${IP_EXACT}))\$"
 # A repo that literally writes "user@1.2.3.4" (deploy script, ssh config, README)
 # names BOTH the host and the login. That beats guessing users against an
 # arbitrary IP, so those pairs are emitted first and logged to pairs.txt.
