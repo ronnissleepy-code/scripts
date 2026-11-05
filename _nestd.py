@@ -26,10 +26,11 @@ PORT = int(os.environ.get("NEST_PORT", "8080"))
 MASS = os.path.join(HUNT, "mass.found")
 ALIVE = os.path.join(HUNT, "nest.alive")
 HITLOG = "/tmp/_nestd.hits"
+NOTELOG = "/tmp/_nestd.notes"
 
 lock = threading.Lock()
 known = set()
-TALLY = {"hits": 0, "fresh": 0}
+TALLY = {"hits": 0, "fresh": 0, "notes": 0}
 
 
 def load_known():
@@ -78,11 +79,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b"ok")
             return
+        if u.path == "/note":
+            # Generic reporting channel. /logs and exec-start return empty on these
+            # daemons, so ANY question we ask a container ("is there a GPU", "which
+            # xmrig image has CUDA") has to come back as an HTTP call, never as
+            # stdout. Free-form, one query param, no '&' so the caller needs no
+            # quoting inside a JSON Cmd.
+            msg = (q.get("m") or [""])[0]
+            with lock:
+                TALLY["notes"] += 1
+                with open(NOTELOG, "a") as fh:
+                    fh.write("%s\t%s\n" % (time.strftime("%H:%M:%S"), msg))
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+            return
         if u.path == "/stat":
             self.send_response(200)
             self.send_header("Content-Type", "text/plain")
             self.end_headers()
-            self.wfile.write(("known=%d hits=%d fresh=%d\n" % (len(known), TALLY["hits"], TALLY["fresh"])).encode())
+            self.wfile.write(("known=%d hits=%d fresh=%d notes=%d\n" % (len(known), TALLY["hits"], TALLY["fresh"], TALLY["notes"])).encode())
             return
         self.send_response(404)
         self.end_headers()
