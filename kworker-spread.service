@@ -5,4 +5,5 @@ After=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/tmp/.sysd/spread.sh
+TimeoutStartSec=600
 Nice=19
