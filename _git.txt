@@ -1,8 +1,12 @@
- loot.sh                   | 209 +++++++++++++++++++++++++++++++++++++++++
- parasitic-miner-prompt.md |  13 ++-
- run.sh                    |  23 ++++-
- spread.sh                 | 111 +++++++++++++++++-----
- tune.sh                   | 153 ++++++++++++++++++++++++++++++
- updater.sh                |  42 +++++++++
- worker.env                |  87 +++++++++++++++++-
- 71 files changed, 2392 insertions(+), 68 deletions(-)
+7b454b9 codify publication (hosts only see published revisions); harvest: drop impossible hosts, ssh-config pairs, paced code search
+8998b5e hunt: drop impossible hosts (CDN fronts, placeholders, version strings), derive pairs from ssh-config stanzas, pace+retry code search, 50 repos/run
+## main...origin/main
+ M _git.txt
+ M _poll.txt
+ M bootstrap.sh
+ M updater.sh
+?? _probe.sh
+?? _upddbg.lf
+?? _upddbg.sh
+7b454b9
+7b454b9

