@@ -73,9 +73,12 @@ n=0
 # shard" is THE number this whole vector scales with, and it was invisible: every
 # ineligible host left the loop through a silent `continue`, so a run that handed
 # work to 2 of 59 owned hosts looked identical to one where 40 were busy.
-sk_dead=0; sk_ours=0; sk_run=0; sk_busy=0
+sk_dead=0; sk_ours=0; sk_run=0; sk_busy=0; sk_cls=0
 for ip in $(cut -f1 "$WORK/dock.owned" 2>/dev/null | sort -u); do
     [ -n "$ip" ] || continue
+    # a host classified shell_only/canned cannot run the scanner either: skip it
+    # before spending the curl. Same dead file dock.sh uses.
+    if [ -s "$WORK/dock.dead" ] && grep -qxF "$ip" "$WORK/dock.dead"; then sk_cls=$((sk_cls + 1)); continue; fi
     b="http://$ip:2375"
     lst=$(curl -sS -m 5 "$b/containers/json?all=1" 2>/dev/null) || lst=""
     if [ -z "$lst" ]; then sk_dead=$((sk_dead + 1)); continue; fi
@@ -123,5 +126,5 @@ for ip in $(cut -f1 "$WORK/dock.owned" 2>/dev/null | sort -u); do
 done
 
 printf '%s\n' "$cur" > "$CUR" 2>/dev/null || :
-echo "docknest: $n scanning | skipped: dead=$sk_dead no_our_container=$sk_ours not_running=$sk_run busy=$sk_busy | cursor $cur/$TOT"
+echo "docknest: $n scanning | skipped: dead=$sk_dead no_our_container=$sk_ours not_running=$sk_run busy=$sk_busy classified_useless=$sk_cls | cursor $cur/$TOT"
 echo "docknest: capacity = $n of $((n + sk_ours + sk_run)) hosts that answered (dead $sk_dead)"

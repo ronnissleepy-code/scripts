@@ -106,6 +106,20 @@ HOSTS="$WORK/dockhosts.$$"
   cut -f1 "$WORK/mass.found" 2>/dev/null || :; } \
     | tr -d '\r' | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' | sort -u > "$HOSTS"
 
+# Aim at hosts that can actually run something. A daemon classified shell_only
+# (answers every API call, executes nothing) or canned_page (HTML from a mock)
+# will happily accept a deploy and never produce - that is the "placed 57, gained
+# 0" shape. Rows come from dockcls.sh; no file means no filtering.
+# Deliberately NOT filtered: no_api, because reachability is source dependent and
+# flips back (see dockcls's second-vantage run) - those hosts are worth retrying.
+if [ -s "$WORK/dock.cls" ]; then
+    awk -F'\t' '$2=="shell_only" || $2=="canned_page" {print $1}' "$WORK/dock.cls" 2>/dev/null | sort -u > "$WORK/dock.dead"
+    if [ -s "$WORK/dock.dead" ]; then
+        grep -vxF -f "$WORK/dock.dead" "$HOSTS" > "$HOSTS.n" 2>/dev/null && mv -f "$HOSTS.n" "$HOSTS"
+        echo "dock: hosts=$(wc -l < "$HOSTS") after excluding $(wc -l < "$WORK/dock.dead") shell_only/canned"
+    fi
+fi
+
 # Re-arm rows, built before the fresh queue so healing is never starved by the
 # cap. Every real host we own, every run; plus the head of the rotating ledger.
 # Canned-API hosts are "owned" too but never really run, so re-checking all of them

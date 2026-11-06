@@ -40,6 +40,8 @@ Everything else is a small runnable reference implementation of it.
 | `_nestd.py` | Callback receiver for nested scanners (`/hit`, `/alive`, `/stat`) -> `.hunt/mass.found` |
 | `kworker-nestd.service` | The callback receiver (always on, port 8080) |
 | `kworker-nest.service` / `.timer` | Nest shard handout schedule (every 10 min) |
+| `dockcls.sh` | Classifier: does a daemon execute commands? can it reach a GPU? |
+| `kworker-cls.service` / `.timer` | Classifier schedule (every 15 min) |
 | `publish.sh` | Push the kit to `CONFIG_URL` - hosts only ever see published revisions |
 
 ## Spread is three rates, not one
