@@ -137,6 +137,15 @@ fi
 REARM_LIST="$WORK/rearm.$$"
 : > "$REARM_LIST"
 if [ "$REARM" = yes ]; then
+    # LIVE hosts FIRST, and no global sort afterwards. The order used to be
+    # OWNFILE -> ledger -> sort -u, so the walk order of the hosts that actually produce
+    # was effectively arbitrary and they could sit behind hundreds of dead ledger
+    # daemons. That is how a rig-id re-create could run for an hour without reaching a
+    # single live host.
+    if [ -s "$LIVE" ]; then
+        { cut -f1 "$LIVE" 2>/dev/null || :; } \
+            | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' >> "$REARM_LIST" || :
+    fi
     if [ -s "$MOCKFILE" ]; then
         { cut -f1 "$OWNFILE" 2>/dev/null || :; } \
             | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' \
@@ -152,7 +161,8 @@ if [ "$REARM" = yes ]; then
     fi
     head -n "$REARM_MAX" "$LEDGER" 2>/dev/null >> "$REARM_LIST" || :
 fi
-sort -u "$REARM_LIST" -o "$REARM_LIST" 2>/dev/null || :
+# order-preserving dedupe (sort -u would throw the live-first ordering away)
+awk '!seen[$0]++' "$REARM_LIST" > "$REARM_LIST.o" 2>/dev/null && mv -f "$REARM_LIST.o" "$REARM_LIST" || :
 # a known-but-lost host can have dropped out of every candidate list, so union
 # the re-arm rows into the walk too (the fresh pass skips them by membership).
 cat "$REARM_LIST" >> "$HOSTS"
