@@ -113,6 +113,12 @@ Landmines, each hit live - read before editing these scripts:
   candidate file scanned 0 rows. Use `if cmd; then continue; fi`.
 - A backgrounded `dock_one` inherits the walk's stdin and eats lines out from under
   `read`. Redirect `< /dev/null`.
+- `set -e` plus a command substitution whose **last** command exits non-zero: the
+  assignment inherits that status and kills the shell mid-function, silently and
+  after its log line. `hasip=$(... | grep -c ...)` exits 1 on zero matches, so every
+  host we already held died right there - measured: 218 daemons probed, 7 deployed,
+  0 re-creates, ~198 hosts dying on one line. Append `|| var=0` (and note `cut`/`head`
+  as the last stage make a pipeline safe, `grep` does not).
 - Windows editors write CRLF and dash keeps the CR as part of the last word: strip
   with `sed -e 's/[[:cntrl:]]$//'` and never `s/.$//` (that eats a real character
   on any LF-only line).

@@ -223,7 +223,12 @@ threads_for() {
         [ "$cap" -lt 1 ] && cap=1
         [ "$t" -gt "$cap" ] && t=$cap
     fi
-    [ "$t" -gt 16 ] && t=16
+    # 16 was an arbitrary cap and it is the wrong one for the big boxes: RandomX is
+    # L3-bound at roughly 2MB/thread, so a 256-vCPU host (45.63.107.63: 256 vCPU, 1TB)
+    # ran 16 threads on hardware that wants ~128 and left the rest of the machine idle.
+    # The RAM guard above still protects the small hosts (~256MB/thread + 768MB back),
+    # so raising the ceiling only moves the hosts that actually have the room.
+    [ "$t" -gt 32 ] && t=32
     printf '%s' "$t"
 }
 # --- plain body: NO Entrypoint override, NO sh -c supervisor --------------------------
@@ -441,6 +446,9 @@ dock_one() {
             # (Deleting first is how most owned hosts ended up empty while still
             # answering the API.)
             cjcmd=$(printf '%s' "$cj" | grep -o '"Cmd":\[[^]]*\]' | head -1)
+            # the thread count this host should carry RIGHT NOW, from its own size
+            want=$(threads_for "${ncpu:-0}" "${memb:-0}")
+            cth=$(printf '%s' "$cjcmd" | grep -o '\-\-threads","[0-9]*"' | grep -o '[0-9]*') || cth=""
             stale=""
             # FIRST: the supervisor shape never mined (see the pbody comment), so anything
             # deployed before the fix must be re-created regardless of anything else.
@@ -464,6 +472,11 @@ dock_one() {
                 # A container deployed before that was added signs in under its hostname,
                 # so the pool cannot attribute production to the host's IP.
                 stale="no --rig-id (pool cannot map this host)"
+            elif [ -n "${cth:-}" ] && [ "$cth" != "$want" ]; then
+                # Thread count is policy, and the policy follows the host's own size, so a
+                # box must not be stuck on whatever ceiling was in force the day it was
+                # infected (measured: a 256 vCPU host parked on 16 threads).
+                stale="threads $cth -> $want for ${ncpu:-?} vCPU"
             elif ! printf '%s' "$cj" | grep -q '"NetworkMode":"host"'; then
                 # The container looks current - but does the published API actually answer
                 # from OUTSIDE? On several of these daemons docker-proxy/iptables does not
