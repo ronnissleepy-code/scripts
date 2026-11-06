@@ -30,6 +30,9 @@ LIVE="$WORK/dock.live"
 OUT="$WORK/fleet.hosts.tsv"
 HEAL="$WORK/heal.list"
 DEAD="$WORK/dock.dead"
+# Pool-side per-worker rows, pushed here by the PC fetcher: lines "W<TAB>ip<TAB>hash".
+# This is the fallback truth for hosts whose :47999 is refused/firewalled.
+POOLTSV="$WORK/fleet.tsv"
 NOW=$(date +%s)
 # A core yields roughly 400-900 H/s. Below this fraction of (threads x 400) the host
 # is suspect: light mode on a big box, throttled cgroup, or a dead dataset.
@@ -46,8 +49,24 @@ for ip in $recent; do
     if [ -s "$DEAD" ] && grep -qxF "$ip" "$DEAD" 2>/dev/null; then continue; fi
     s=$(curl -sS -m 5 "http://$ip:47999/2/summary" 2>/dev/null) || s=""
     if [ -z "$s" ]; then
-        silent=$((silent + 1))
-        printf '%s\t%s\tsilent\t0\t0/0\n' "$NOW" "$ip" >> "$OUT"
+        # :47999 is unusable on a big slice of this population (refused, firewalled, or
+        # a stranger's service already on the port - measured all three). The pool does
+        # not care: dock.sh signs in with --rig-id=<ip>, so a W row for this IP IS this
+        # host's production. Keying the census on a hole in the host's firewall is why
+        # it kept reporting "silent" while the pool kept climbing.
+        ph=$(awk -v ip="$ip" -F'\t' '$1 == "W" && $2 == ip { h = $3 } END { print h+0 }' "$POOLTSV" 2>/dev/null)
+        if [ -n "${ph:-}" ] && [ "$ph" -gt 0 ]; then
+            printf '%s\t%s\tpool:%s\t0\t0/0\n' "$NOW" "$ip" "$ph" >> "$OUT"
+            if [ "$ph" -ge "$FLOOR" ]; then
+                ok=$((ok + 1))
+            else
+                zero=$((zero + 1))
+                printf '%s\n' "$ip" >> "$HEAL"
+            fi
+        else
+            silent=$((silent + 1))
+            printf '%s\t%s\tsilent\t0\t0/0\n' "$NOW" "$ip" >> "$OUT"
+        fi
         continue
     fi
     hs=$(printf '%s' "$s" | tr -d ' "' | grep -o 'total:\[[0-9.]*' | head -1 | cut -d: -f2 | cut -d[ -f2)
