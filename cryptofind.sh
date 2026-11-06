@@ -28,6 +28,22 @@ verword() {
 if [ "$#" -gt 0 ]; then
     for ip in "$@"; do
         score=0; ev=""
+        # Fixture tell, checked BEFORE any chain call: a real engine answers an unknown
+        # method with -32601 in a short reply, while a fake answers EVERYTHING on EVERY
+        # port with one big blob that echoes the request back. 147.139.164.26 did that
+        # with a single 4129-byte body on 18081 AND 18082, which was enough to "score" it
+        # 14 as substrate+solana+tendermint+bitcoind+WALLET when it held nothing.
+        fake=0
+        for fp in 18081 18082 8545 9933; do
+            fo=$(curl -sS -m 5 -X POST -H 'Content-Type: application/json' \
+                 -d '{"jsonrpc":"2.0","id":"0","method":"zzzzNope"}' \
+                 "http://$ip:$fp/json_rpc" 2>/dev/null) || fo=""
+            case "$fo" in *zzzzNope*) fake=1; break ;; esac
+        done
+        if [ "$fake" = 1 ]; then
+            printf '%s\t0\tfixture-echo\n' "$ip"
+            continue
+        fi
         rpc() {   # port path method [version]
             o=$(curl -sS -m 5 -X POST -H 'Content-Type: application/json' \
                 -d "{\"jsonrpc\":\"${5:-2.0}\",\"method\":\"$3\",\"id\":1}" \
