@@ -1,10 +1,6 @@
-﻿HEAD=f3f2505 origin=f3f2505
-dockTimer=OnUnitActiveSec=20min
-spreadTimer=OnUnitActiveSec=1h
-lootTimer=OnUnitActiveSec=2h
-selfhealLines=2
-pcLog=== Thu, Nov  5, 2026  3:50:34 AM sweep | pcengine up Thu, Nov  5, 2026  3:59:03 AM pid=80838 | == Thu, Nov  5, 2026  3:59:03 AM deploy
-pcOwned=6 pcSeen=17
-box1=Warning: Permanently added '167.233.74.146' (ED25519) to the list of known hosts. / owned=44 / queue=3941 / NEXT                         LEFT LAST                           PASSED UNIT               ACTIVATES / Thu 2026-11-05 09:13:25 UTC 13min Thu 2026-11-05 08:43:40 UTC 15min ago kworker-dock.timer kworker-dock.service /  / 1 timers listed. / Pass --all to see loaded but inactive timers, too.
-pool=shares=164 invalid=0 amtDue=5326147
-shprocs=21
+create: {"Id":"90e7100dcef8d144465e09921b01c83ba7788002b534f39febd01908ac7114ae","Warnings":[]}
+start: []
+state: Running":true
+== its own log bannner:
+== host api: []
+READY

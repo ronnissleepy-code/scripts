@@ -1,12 +1,6 @@
-CR=0
-quotes=40
-shodan.shFAIL
-hunt.shFAIL
-loot.shFAIL
-dock.shFAIL
-dockmass.shFAIL
-bootstrap.shFAIL
-updater.shFAIL
-===STAT
-===FILTER
-===IDB
+create: {"Id":"90e7100dcef8d144465e09921b01c83ba7788002b534f39febd01908ac7114ae","Warnings":[]}
+start: []
+state: Running":true
+== its own log bannner:
+== host api: []
+READY

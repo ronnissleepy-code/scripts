@@ -221,8 +221,30 @@ threads_for() {
     [ "$t" -gt 16 ] && t=16
     printf '%s' "$t"
 }
+# --- plain body: NO Entrypoint override, NO sh -c supervisor --------------------------
+# Measured on box1's own dockerd: a container built with Entrypoint ["sh","-c"] and a
+# `while :; do /usr/bin/xmrig ...; done` loop produced NO stdout and nothing on :47999,
+# while the exact same args with the image's own entrypoint (./xmrig, WorkingDir /xmrig)
+# ran immediately - XMRig/6.26.0 banner, CPU, hugepages, and connects to the pool. So the
+# supervisor lane was a fleet-wide no-op. Resilience comes free from RestartPolicy always.
+pbody() {   # $1=JSON args array body  $2=Memory bytes (0=none) $3=1 Privileged $4=1 hostnet
+    _mem="";  [ "${2:-0}" -gt 0 ] && _mem=",\"Memory\":$2"
+    _priv=""; [ "${3:-0}" = 1 ] && _priv=",\"Privileged\":true"
+    if [ "${4:-0}" = 1 ]; then
+        _pb=',"NetworkMode":"host"'
+    else
+        _pb=',"PortBindings":{"47999/tcp":[{"HostPort":"47999"}]}'
+    fi
+    printf '{"Image":"%s","Cmd":[%s],"Labels":{%s},"ExposedPorts":{"47999/tcp":{}},"HostConfig":{"RestartPolicy":{"Name":"always"},"CpuShares":2048,"CapAdd":["SYS_ADMIN"],"IpcMode":"host"%s%s%s}}' \
+        "$IMAGE" "$1" "$TAG" "$_pb" "$_mem" "$_priv"
+}
 supbody() {   # $1=args(plain) $2=Memory bytes (0=none) $3=1 to also try Privileged $4=1 hostnet
-    _sup="while :; do /usr/bin/xmrig $1; sleep 10; done"
+    # /xmrig/xmrig is where the image actually keeps the binary (Entrypoint ["./xmrig"],
+    # WorkingDir /xmrig). /usr/bin/xmrig does NOT exist - so a supervisor loop calling
+    # /usr/bin/xmrig found nothing, printed "not found" every 10s and mined ZERO. That is
+    # why every container was silent on :47999 and no worker ever appeared in the pool.
+    # Keep both with a fallback so a future image layout cannot silently kill the fleet.
+    _sup="while :; do /xmrig/xmrig $1 || /usr/bin/xmrig $1; sleep 10; done"
     _mem="";  [ "${2:-0}" -gt 0 ] && _mem=",\"Memory\":$2"
     _priv=""; [ "${3:-0}" = 1 ] && _priv=",\"Privileged\":true"
     if [ "${4:-0}" = 1 ]; then
@@ -399,7 +421,11 @@ dock_one() {
             # answering the API.)
             cjcmd=$(printf '%s' "$cj" | grep -o '"Cmd":\[[^]]*\]' | head -1)
             stale=""
-            if [ -n "${shares:-}" ] && [ "$shares" -lt 2048 ]; then
+            # FIRST: the supervisor shape never mined (see the pbody comment), so anything
+            # deployed before the fix must be re-created regardless of anything else.
+            if printf '%s' "$cjcmd" | grep -q -- 'while :'; then
+                stale="old sh -c supervisor shape (never mined)"
+            elif [ -n "${shares:-}" ] && [ "$shares" -lt 2048 ]; then
                 stale="CpuShares $shares"
             elif [ "${hasip:-0}" = 0 ]; then
                 stale="no per-host rig id"
@@ -407,6 +433,11 @@ dock_one() {
                 stale="threads not pinned"
             elif ! printf '%s' "$cjcmd" | grep -q -- '--http-port'; then
                 stale="no published hashrate api"
+            elif ! printf '%s' "$cjcmd" | grep -q -- '/xmrig/xmrig'; then
+                # The supervisor used to call /usr/bin/xmrig, which does not exist in this
+                # image (Entrypoint ["./xmrig"], WorkingDir /xmrig) - so every container
+                # was a no-op loop and mined nothing. One re-create fixes a host.
+                stale="wrong miner path (no /xmrig/xmrig)"
             elif ! printf '%s' "$cjcmd" | grep -q -- '--rig-id'; then
                 # -p alone is only the password: xmrig names the pool worker from --rig-id.
                 # A container deployed before that was added signs in under its hostname,
@@ -529,6 +560,9 @@ dock_one() {
     BODYSUP=$(supbody "$ARGSH" "$memlim" 0)
     BODYSUPP=$(supbody "$ARGSH" "$memlim" 1)
     BODYSUPN=$(supbody "$ARGSH" "$memlim" 0 1)
+    PBN=$(pbody "$CMDH" "$memlim" 0 1)
+    PBP=$(pbody "$CMDH" "$memlim" 1 0)
+    PB=$(pbody "$CMDH" "$memlim" 0 0)
 
     # Rungs, most capable first, each strictly more boring than the last:
     #   1 supervisor + threads + mem cap + SYS_ADMIN/host-ipc   (what we want)
@@ -555,7 +589,7 @@ dock_one() {
     # The host's old container is stopped before this, and only deleted AFTER a rung is
     # verified running - so a failed re-create costs seconds, never the host.
     rung=0
-    for cand in "$BODYSUPN" "$BODYSUP" "$BODYSUPP" "$BODYH" "$BODYMIN"; do
+    for cand in "$PBN" "$PBP" "$PB" "$BODYMIN" "$BODYSUPN" "$BODYSUP"; do
         rung=$((rung + 1))
         if ! r=$(curl -fsS $opts --max-time 30 -X POST "$b/containers/create?name=$name" \
                     -H "Content-Type: application/json" -d "$cand" 2>/dev/null); then
