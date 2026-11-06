@@ -419,6 +419,9 @@ dock_one() {
             printf '%s\t%s\n' "$ip" "existing" >> "$OWNFILE"
             return 0
         fi
+    fi          # closes `if [ -n "$have" ]` above: reaching here means no container to
+                # keep, so the create path below MUST run. Previously this fi existed
+                # and the block above returned before it - the re-create never happened.
         # FALL THROUGH to the create path. This is the bug that kept the fleet stale:
         # the stale branch above clears HAVE (to force a re-create) but the old code
         # returned right here anyway - so a "re-creating" host was logged, counted and

@@ -65,7 +65,9 @@ fi
 [ "$MODE" = rate ] || fetch >/dev/null 2>&1 || { echo "pool: fetch failed (see landmines in the header)"; }
 [ -s "$RAW" ] || { echo "pool: no body"; exit 0; }
 sz=$(wc -c < "$RAW")
-if [ "$sz" -lt 300 ]; then echo "pool: short body ($sz bytes) - blocked, not zero hashrate"; exit 0; fi
+# The real wallet JSON is ~180 bytes. An earlier 300 floor rejected the genuine body
+# and reported "blocked" on a perfectly good answer.
+if [ "$sz" -lt 100 ]; then echo "pool: short body ($sz bytes) - blocked, not zero hashrate"; exit 0; fi
 
 # Pure-grep/awk parser: no python dependency, and no heredoc - a heredoc here is
 # where the script hung twice with zero output.
