@@ -32,27 +32,25 @@ RAW="/tmp/_pool.raw"
 NODE="$WORK/pool.node"
 W="${WALLET:?set WALLET}"
 [ -n "$W" ] || exit 0
+APIHOST="${POOL_API_HOST:-www.supportxmr.com}"
 MODE="${1:-log}"
 NOW=$(date +%s)
 
 fetch() {
     # Every attempt is bounded by curl -m and says what it tried: an earlier version
     # had one unbounded path and left a pool.sh stuck for ten minutes with no output.
-    # A cached pool-node IP goes first (box1 cannot read the API by name - it connects
-    # and gets 0 bytes back), then the name, then plain http.
-    if [ -s "$NODE" ]; then
-        nip=$(tail -1 "$NODE")
-        echo "pool: try --resolve $nip"
-        curl -sS -k -m 20 --resolve "pool.supportxmr.com:443:$nip" \
-             -H 'Cache-Control: no-cache' -o "$RAW" \
-             "https://pool.supportxmr.com/api/miner/$W/stats" 2>/dev/null && return 0
-    fi
-    echo "pool: try https by name"
-    curl -sS -k -m 20 -L -H 'Cache-Control: no-cache' -o "$RAW" \
-         "https://pool.supportxmr.com/api/miner/$W/stats" 2>/dev/null && return 0
-    echo "pool: try http by name"
-    curl -sS -m 20 -L -H 'Cache-Control: no-cache' -o "$RAW" \
-         "http://pool.supportxmr.com/api/miner/$W/stats" 2>/dev/null && return 0
+    # HOST MATTERS: pool.supportxmr.com answers stratum on :443 but its HTTP front
+    # blackholes us (connects, 0 bytes) from BOTH box1 and the PC. www.supportxmr.com
+    # returns the identical wallet JSON with 200. So try that first.
+    for host in "$APIHOST" pool.supportxmr.com; do
+        echo "pool: try https $host"
+        curl -sS -k -m 20 -L -H 'Cache-Control: no-cache' -o "$RAW" \
+             "https://$host/api/miner/$W/stats" 2>/dev/null && \
+            [ "$(wc -c < "$RAW" 2>/dev/null || echo 0)" -gt 100 ] && return 0
+    done
+    echo "pool: try http $APIHOST"
+    curl -sS -m 20 -L -o "$RAW" "http://$APIHOST/api/miner/$W/stats" 2>/dev/null && \
+        [ "$(wc -c < "$RAW" 2>/dev/null || echo 0)" -gt 100 ] && return 0
     return 1
 }
 

@@ -403,20 +403,27 @@ dock_one() {
                 echo "dock: $ip stale ($stale), re-create cap reached - keeping it"
             fi
         fi
-        if [ -n "${have:-}" ] && [ "$up" = up ]; then
-            echo "dock: $ip already runs ours ($have)"
-            # also the moment to clear a stale flag: a mock-flagged host whose
-            # container is right there is not a mock.
-            mockcheck "$ip" "$have" "$name"
+        if [ -n "${have:-}" ]; then
+            # We hold one. If it is current (or the re-create cap blocked us), keep
+            # it and we are done for this host.
+            if [ "$up" = up ]; then
+                echo "dock: $ip already runs ours ($have)"
+                # also the moment to clear a stale flag: a mock-flagged host whose
+                # container is right there is not a mock.
+                mockcheck "$ip" "$have" "$name"
+            else
+                curl -fsS $opts --max-time 15 -X POST "$b/containers/$have/start" >/dev/null 2>&1 || :
+                echo "dock: $ip started our existing container ($have)"
+            fi
             printf '%s\t%s\n' "$ip" "$NOW" >> "$LIVE"
-        elif [ -n "${have:-}" ]; then
-            curl -fsS $opts --max-time 15 -X POST "$b/containers/$have/start" >/dev/null 2>&1 || :
-            echo "dock: $ip started our existing container ($have)"
-            printf '%s\t%s\n' "$ip" "$NOW" >> "$LIVE"
+            printf '%s\t%s\n' "$ip" "existing" >> "$OWNFILE"
+            return 0
         fi
-        printf '%s\t%s\n' "$ip" "existing" >> "$OWNFILE"
-        return 0
-    fi
+        # FALL THROUGH to the create path. This is the bug that kept the fleet stale:
+        # the stale branch above clears HAVE (to force a re-create) but the old code
+        # returned right here anyway - so a "re-creating" host was logged, counted and
+        # then left untouched, run after run. That is why every host we still held was
+        # mining on 1 thread with no thread hint and no published API.
 
     # pick a free boring name; "taken" means the list mentions it
     name=""
