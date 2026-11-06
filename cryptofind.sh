@@ -34,8 +34,8 @@ if [ "$#" -gt 0 ]; then
         # with a single 4129-byte body on 18081 AND 18082, which was enough to "score" it
         # 14 as substrate+solana+tendermint+bitcoind+WALLET when it held nothing.
         fake=0
-        for fp in 18081 18082 8545 9933; do
-            fo=$(curl -sS -m 5 -X POST -H 'Content-Type: application/json' \
+        for fp in 18081 8545; do
+            fo=$(curl -sS -m 3 -X POST -H 'Content-Type: application/json' \
                  -d '{"jsonrpc":"2.0","id":"0","method":"zzzzNope"}' \
                  "http://$ip:$fp/json_rpc" 2>/dev/null) || fo=""
             case "$fo" in *zzzzNope*) fake=1; break ;; esac
@@ -66,9 +66,17 @@ if [ "$#" -gt 0 ]; then
         case "$o" in *'"result"'*) score=$((score + 2)); ev="$ev solana" ;; esac
         o=$(rpc 26657 /status status)
         case "$o" in *node_info*|*'"result"'*) score=$((score + 2)); ev="$ev tendermint" ;; esac
-        c=$(curl -sS -m 5 -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
-             -d '{"jsonrpc":"1.0","method":"getblockchaininfo","id":1}' "http://$ip:8332/" 2>/dev/null) || c=""
-        case "$c" in 401|200) score=$((score + 2)); ev="$ev bitcoind" ;; esac
+        # bitcoind. A bare 200 on :8332 proves only "some HTTP server on 8332" - the first
+        # pass counted 36 hosts that way. bitcoind either challenges (401, rpcuser set) or
+        # answers with a real getblockchaininfo body, which carries a "chain" field.
+        br=$(curl -sS -m 5 -X POST -H 'Content-Type: application/json' \
+             -d '{"jsonrpc":"1.0","method":"getblockchaininfo","id":1}' -w '\n%{http_code}' \
+             "http://$ip:8332/" 2>/dev/null) || br=""
+        bc=$(printf '%s' "$br" | tail -1)
+        case "$bc" in
+            401) score=$((score + 2)); ev="$ev bitcoind(auth)" ;;
+            200) case "$br" in *'"chain"'*) score=$((score + 2)); ev="$ev bitcoind" ;; esac ;;
+        esac
         for wp in 18082 18083; do
             o=$(rpc "$wp" /json_rpc get_balance)
             case "$o" in *balance*)
