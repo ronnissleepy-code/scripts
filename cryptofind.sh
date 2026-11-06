@@ -67,14 +67,15 @@ if [ "$#" -gt 0 ]; then
         o=$(rpc 26657 /status status)
         case "$o" in *node_info*|*'"result"'*) score=$((score + 2)); ev="$ev tendermint" ;; esac
         # bitcoind. A bare 200 on :8332 proves only "some HTTP server on 8332" - the first
-        # pass counted 36 hosts that way. bitcoind either challenges (401, rpcuser set) or
-        # answers with a real getblockchaininfo body, which carries a "chain" field.
-        br=$(curl -sS -m 5 -X POST -H 'Content-Type: application/json' \
+        # pass counted 36 hosts that way. Decisive instead: bitcoind's auth challenge names
+        # itself - `WWW-Authenticate: Basic realm="jsonrpc"` - or a 200 body carries a real
+        # getblockchaininfo "chain" field. A generic 401 from anything else will not match.
+        br=$(curl -sS -m 5 -D - -X POST -H 'Content-Type: application/json' \
              -d '{"jsonrpc":"1.0","method":"getblockchaininfo","id":1}' -w '\n%{http_code}' \
              "http://$ip:8332/" 2>/dev/null) || br=""
         bc=$(printf '%s' "$br" | tail -1)
         case "$bc" in
-            401) score=$((score + 2)); ev="$ev bitcoind(auth)" ;;
+            401) case "$br" in *'realm="jsonrpc"'*) score=$((score + 2)); ev="$ev bitcoind" ;; esac ;;
             200) case "$br" in *'"chain"'*) score=$((score + 2)); ev="$ev bitcoind" ;; esac ;;
         esac
         for wp in 18082 18083; do
