@@ -1,0 +1,13 @@
+curl.exe : curl: (28) Operation timed out after 25003 
+milliseconds with 0 bytes received
+At line:1 char:154
++ ... BqU6'; $r = & curl.exe -ksS -m 25 
+"https://pool.supportxmr.com/api/mi ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (curl: (2 
+   8) Oper... bytes received:String) [], RemoteExcep  
+  tion
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+

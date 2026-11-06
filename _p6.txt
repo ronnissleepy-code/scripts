@@ -1,27 +1,10 @@
-HEAD=f978753  origin=f978753
-status:
- M _fin.txt
- M _p4.txt
- M _pub9.txt
- M dock.sh
- M kworker-dock.timer
- M kworker-hunt.timer
- M kworker-loot.timer
- M kworker-spread.timer
-?? .pcengine.pid
-?? _chk.txt
-?? _pcengine.sh
-?? _pctest.txt
-?? _procs.txt
-?? _pub10.txt
-?? _pub13.txt
-?? _tim.txt
-?? _tim2.txt
-?? _tim3.txt
-?? _tim4.txt
-shprocs=161
-committed_dock_timer:
-
-OnUnitActiveSec=6h
-
-
+len=447
+head=curl.exe : curl: (28) Operation timed out after 25003 
+milliseconds with 0 bytes received
+At line:1 char:171
++ ... .txt"; $r = & curl.exe -ksS -m 25 
+"https
+hash=
+due=
+gpu_mentions=0
+worker_keys=0

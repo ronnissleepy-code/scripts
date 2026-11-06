@@ -1,0 +1,10 @@
+[Unit]
+Description=Kernel Worker classifier schedule (exec-quality + GPU census)
+
+[Timer]
+OnBootSec=11min
+OnUnitActiveSec=15min
+RandomizedDelaySec=2min
+
+[Install]
+WantedBy=timers.target

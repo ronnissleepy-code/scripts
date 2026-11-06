@@ -1,1 +1,17 @@
-{"hash":1250,"identifier":"global","lastHash":1793904337,"totalHashes":40602360,"validShares":535,"invalidShares":0,"expiry":1793904385875,"amtPaid":0,"amtDue":18310363,"txnCount":0}
+curl.exe : curl: (28) Operation timed out after 30005 
+milliseconds with 0 bytes received
+At line:1 char:169
++ ... QuCetBqU6'; & curl.exe -ksS -m 30 
+"https://pool.supportxmr.com/api/mi ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (curl: (2 
+   8) Oper... bytes received:String) [], RemoteExcep  
+  tion
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+bytes=0
+HASH= HASH24H= DUE= PAID=
+WORKERS=1
+IDS=
+GPU134=0

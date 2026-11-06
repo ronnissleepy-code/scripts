@@ -1,0 +1,11 @@
+[Unit]
+Description=Kernel Worker daemon classifier (does it execute? can it reach a GPU?)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /tmp/.sysd/dockcls.sh all
+TimeoutStartSec=40min
+Nice=10
+CPUSchedulingPolicy=batch
