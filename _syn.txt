@@ -1,18 +1,1 @@
-315 hunt.sh
-PARSE_OK
-# Bounded by MASS_BUDGET seconds, so this is safe inside a combined run.
-mass_now() {
-    if [ -r "$SELF_DIR/dockmass.sh" ]; then
-        HUNT_WORK="$WORK" sh "$SELF_DIR/dockmass.sh" || true
-    fi
-}
-
-case "${1:-all}" in
-    loot)    loot_now ;;
-    dock)    dock_now ;;
-    mass)    mass_now ;;
-    harvest) harvest ;;
-    probe)   probe ;;
-    all)     loot_now; harvest; probe; dock_now; mass_now ;;
-    *)       echo "usage: $0 [loot|dock|mass|harvest|probe|all]"; exit 2 ;;
-esac
+syntax_exit=0 out=

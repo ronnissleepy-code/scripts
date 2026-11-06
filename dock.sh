@@ -639,6 +639,28 @@ dock_one() {
         fi
         id=$(printf '%s' "$r" | grep -oE '"Id":"[0-9a-f]{20,80}"' | head -1 | cut -d'"' -f4)
         cid=${id:-$name}
+        # Conclusive fixture tell, and it costs nothing: a real engine's create returns
+        # a NEW id, so the id it hands back can never be one that was ALREADY in the
+        # list before the create. A hand-written fixture answers every call with its own
+        # one frozen container, so the "new" id is an id we had already seen and the
+        # container we think we made never exists anywhere.
+        #
+        # This is the hole 45.63.107.63 came through. It claims 256 vCPU / 1 TB, its
+        # list is a frozen /web-app with a typed-by-hand id (a1b2c3d4e5f6 repeating),
+        # create answers 200 (not 201) with that same id, no header says "Server:
+        # Docker/...", and nothing we create ever appears. mockcheck's "our id is in the
+        # list, so it is real" test then read it as a healthy host: the flag never stuck,
+        # so the host was counted as owned, re-deployed to and re-armed every run while
+        # producing 0 H/s for its entire life.
+        if [ -n "$id" ] && printf '%s' "$lst" | grep -qF "\"Id\":\"$id\""; then
+            mip=$ip
+            mockflag "create gave back an id that was already here"
+            # Not deployed, and deliberately not written to OWNFILE/LIVE: a fixture is
+            # not a host we hold. It stays in MOCKFILE, which re-arms only MOCK_RECHECK
+            # of them per run, so a fake stops eating the budget and a fixture that gets
+            # fixed is still found again instead of being written off forever.
+            return 0
+        fi
         # No -f here: docker answers a good start with 204 and an empty body, and a
         # refused one with a JSON error body - so the body IS the verdict.
         err=$(curl -sS $opts --max-time 25 -X POST "$b/containers/$cid/start" 2>/dev/null) || err="curl failed"
