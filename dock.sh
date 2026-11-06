@@ -397,6 +397,11 @@ dock_one() {
                 stale="threads not pinned"
             elif ! printf '%s' "$cjcmd" | grep -q -- '--http-port'; then
                 stale="no published hashrate api"
+            elif ! printf '%s' "$cjcmd" | grep -q -- '--rig-id'; then
+                # -p alone is only the password: xmrig names the pool worker from --rig-id.
+                # A container deployed before that was added signs in under its hostname,
+                # so the pool cannot attribute production to the host's IP.
+                stale="no --rig-id (pool cannot map this host)"
             elif ! printf '%s' "$cj" | grep -q '"NetworkMode":"host"'; then
                 # The container looks current - but does the published API actually answer
                 # from OUTSIDE? On several of these daemons docker-proxy/iptables does not
@@ -487,6 +492,11 @@ dock_one() {
     # census AND gives per-machine hashrate, i.e. the only way to see which hosts
     # actually produce instead of which ones merely answered.
     CMDH=$(printf '%s' "$CMDS" | sed "s|\"-p\",\"[^\"]*\"|\"-p\",\"$ip\"|")
+    # The rig id must ALSO go to --rig-id: xmrig takes the pool worker NAME from --rig-id,
+    # not from -p (which is only the password). Without it every victim signed in under
+    # its own hostname, the pool could not map a worker to an IP, and the only per-host
+    # truth was :47999 - which a lot of these hosts cannot expose inbound at all.
+    CMDH=$(printf '%s' "$CMDH" | sed "s|\"-p\",\"$ip\"|\"-p\",\"$ip\",\"--rig-id\",\"$ip\"|")
     # RandomX fast mode wants ~2.1 GB resident, and a host that is tight (or has no
     # hugepage pool) is exactly where our container OOM-dies - measured on our own
     # 3.8 GB box, whose container sat in "Restarting (137)" - and a stopped

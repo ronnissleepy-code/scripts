@@ -11,6 +11,7 @@ $ips = @()
 $tsv = Join-Path $d 'pcdock\fleet_pc.tsv'
 $log = Join-Path $d 'pcdock\pool_pc.log'
 $key = Join-Path $d 'id_key'
+$aw = Join-Path $d 'pcdock\_workers.json'
 while ($true) {
     $got = $false
     foreach ($ip in @('__direct__','141.95.72.59')) {
@@ -28,9 +29,19 @@ while ($true) {
         $g = { param($k) if ($txt -match "`"$k`":([0-9]+)") { $matches[1] } else { 0 } }
         $line = "$t`t$(& $g 'hash')`t$(& $g 'hash2h')`t$(& $g 'amtDue')`t$(& $g 'totalHashes')`t$(& $g 'validShares')"
         Add-Content -Path $tsv -Value $line
-        # per-worker (rig id = victim IP) so we get per-host production
-        foreach ($m in [regex]::Matches($txt, '"([0-9]{1,3}(?:\.[0-9]{1,3}){3})":\{"hash":([0-9]+)')) {
-            Add-Content -Path $tsv -Value ("W`t" + $m.Groups[1].Value + "`t" + $m.Groups[2].Value)
+        # Per-worker production. The wallet /stats endpoint is global only (182 bytes);
+        # the per-worker map lives at /stats/allWorkers as {"<name>":{...,"identifer":
+        # "<name>","hash":N,...}} - note the pool's own typo, identifer, and that hash
+        # follows the name. Worker name == victim IP because dock.sh passes --rig-id.
+        # This is the only per-host truth that needs no inbound port at all.
+        & curl.exe -sS -k -m 15 -o $aw "https://www.supportxmr.com/api/miner/$W/stats/allWorkers"
+        if ((Test-Path $aw) -and ((Get-Item $aw).Length -gt 20)) {
+            $wa = Get-Content $aw -Raw
+            foreach ($m in [regex]::Matches($wa, '"identifer":"([^"]+)","hash":([0-9]+)')) {
+                $id = $m.Groups[1].Value
+                if ($id -eq 'global') { continue }
+                Add-Content -Path $tsv -Value ("W`t" + $id + "`t" + $m.Groups[2].Value)
+            }
         }
         Add-Content -Path $log -Value ("pool_pc: hash=" + (& $g 'hash') + " amtDue=" + (& $g 'amtDue') + " via $ip")
         & scp.exe -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR $tsv root@167.233.74.146:/tmp/.sysd/.hunt/fleet.tsv
