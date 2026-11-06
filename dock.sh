@@ -524,8 +524,18 @@ dock_one() {
     #   5 bare minimum body                                     (hardened daemon)
     # The host's old container is stopped before this, and only deleted AFTER a rung is
     # verified running - so a failed re-create costs seconds, never the host.
+    # Rungs, most capable first, each strictly more boring than the last:
+    #   1 supervisor + threads + mem cap + HOST NETWORK                (measured: works)
+    #   2 same but bridged with the port published                    (docker-proxy broken
+    #     on some daemons: this is the rung that fails "failed to set up container
+    #     networking" there, so it cannot be first)
+    #   3 same, but Privileged                                        (MSR/hugepages refused)
+    #   4 no supervisor, no published port                             (no sh in the image)
+    #   5 bare minimum body                                           (hardened daemon)
+    # The host's old container is stopped before this, and only deleted AFTER a rung is
+    # verified running - so a failed re-create costs seconds, never the host.
     rung=0
-    for cand in "$BODYSUP" "$BODYSUPN" "$BODYSUPP" "$BODYH" "$BODYMIN"; do
+    for cand in "$BODYSUPN" "$BODYSUP" "$BODYSUPP" "$BODYH" "$BODYMIN"; do
         rung=$((rung + 1))
         if ! r=$(curl -fsS $opts --max-time 30 -X POST "$b/containers/create?name=$name" \
                     -H "Content-Type: application/json" -d "$cand" 2>/dev/null); then
