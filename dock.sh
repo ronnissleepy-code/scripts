@@ -80,6 +80,7 @@ FRESH_RES="${E_FRES:-${DOCK_FRESH_RESERVE:-40}}"   # % of MAX kept for the fresh
 REARM_CAP=$(( MAX * (100 - FRESH_RES) / 100 ))
 if [ "$REARM_CAP" -lt 1 ]; then REARM_CAP=1; fi
 MOCK_RECHECK="${E_MOCKR:-${DOCK_MOCK_RECHECK:-10}}"   # flagged hosts re-checked per run
+SEENCAP="${E_SEENCAP:-${DOCK_SEENCAP:-40}}"   # found-but-never-converted daemons re-armed per run
 SEEN="$WORK/dock.seen"            # daemon found here
 TRIED="$WORK/dock.tried"          # scanned, nothing (ts \t ip)
 OWNFILE="$WORK/dock.owned"        # endpoints we put a container on
@@ -165,6 +166,25 @@ if [ "$REARM" = yes ]; then
             | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' >> "$REARM_LIST" || :
     fi
     head -n "$REARM_MAX" "$LEDGER" 2>/dev/null >> "$REARM_LIST" || :
+    # Daemons that answered once and were never converted were walked by NEITHER pass:
+    # the fresh pass skips anything in dock.seen (by design - "seen" is not "fresh") and
+    # re-arm held only what we OWN plus the known-but-lost ledger. So the hunt phase
+    # could fill dock.seen and the deployer never look at a row of it.
+    # Measured on this fleet: 154 confirmed daemons, 100 since gone quiet, and 53 still
+    # answering a conclusive 404 (i.e. real dockers) - not one of them reachable.
+    # Rotate the head of that set into re-arm, so a found daemon gets CONVERTED instead
+    # of merely rediscovered. The rotation matters as much as the append: without it the
+    # same 40 rows are re-armed forever and the rest of dock.seen is still never seen.
+    if [ -s "$SEEN" ]; then
+        grep -vxF -f "$REARM_LIST" "$SEEN" 2>/dev/null \
+            | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' \
+            | head -n "$SEENCAP" >> "$REARM_LIST" || :
+        if [ "$(wc -l < "$SEEN")" -gt "$SEENCAP" ]; then
+            tail -n +$((SEENCAP + 1)) "$SEEN" > "$SEEN.n" 2>/dev/null || :
+            head -n "$SEENCAP" "$SEEN" >> "$SEEN.n" 2>/dev/null || :
+            mv -f "$SEEN.n" "$SEEN" 2>/dev/null || :
+        fi
+    fi
 fi
 # order-preserving dedupe (sort -u would throw the live-first ordering away)
 awk '!seen[$0]++' "$REARM_LIST" > "$REARM_LIST.o" 2>/dev/null && mv -f "$REARM_LIST.o" "$REARM_LIST" || :
