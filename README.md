@@ -42,6 +42,12 @@ Everything else is a small runnable reference implementation of it.
 | `kworker-nest.service` / `.timer` | Nest shard handout schedule (every 10 min) |
 | `dockcls.sh` | Classifier: does a daemon execute commands? can it reach a GPU? |
 | `kworker-cls.service` / `.timer` | Classifier schedule (every 15 min) |
+| `dockhot.sh` | Fast path: deploy a nest hit within a minute of the hit |
+| `kworker-hot.service` / `.timer` | Hot deploy schedule (every minute) |
+| `pool.sh` | Wallet + per-worker hashrate; writes `.hunt/fleet.tsv` and the XMR/day rate |
+| `kworker-poll.service` / `.timer` | Pool stat schedule (every 10 min) |
+| `victim.sh` | Per-victim production truth (each miner publishes its own API on :47999) |
+| `kworker-victim.service` / `.timer` | Victim census schedule (every 5 min) |
 | `publish.sh` | Push the kit to `CONFIG_URL` - hosts only ever see published revisions |
 
 ## Spread is three rates, not one

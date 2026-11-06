@@ -1,1 +1,5 @@
-{"hash":1375,"identifier":"global","lastHash":1793904581,"totalHashes":40977360,"validShares":540,"invalidShares":0,"expiry":1793904691299,"amtPaid":0,"amtDue":18310363,"txnCount":0}
+SYNTAX_OK
+pool: fetch failed (see landmines in the header)
+pool: no body
+==TSV
+==RATE
